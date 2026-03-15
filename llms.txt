@@ -1,0 +1,24 @@
+# Project: SolidJS Type-Safe Application
+> A high-performance SolidJS application utilizing encapsulated context patterns and reactive state management best practices.
+
+## Primary Documentation
+- [SolidJS Official Docs](https://docs.solidjs.com) - Core framework reactivity and API reference.
+- [solidjs-context-llms](https://github.com/ysdede/solidjs-context-llms) - The standard for LLM-friendly, type-safe SolidJS context patterns.
+- [solidJSkills Patterns](https://github.com/lvcoi/solidJSkills) - Reference for component-level skills and idiomatic SolidJS UI logic.
+- [Tailwind Grid Layout](https://tailwindcss.com/docs/grid-template-columns) - Essential for your "Attributes" and "Resistances" tables.
+- [Flexbox](https://tailwindcss.com/docs/flex) - Utilities for controlling how flex items both grow and shrink.
+- [Tailwind Arbitrary Values](https://tailwindcss.com/docs/adding-custom-styles) - This lets the AI use specific hex codes like bg-[#0a0a0a] without you having to pre-define them in a config file.
+- [Tailwind Flexbox & Sticky](https://tailwindcss.com/docs/position) - Crucial for making your "Act Tabs" stay at the top while the "Loot Log" scrolls underneath.
+
+## Core Architectural Rules (The Law)
+These rules are strictly enforced via `.continue/rules/solid-context.md`:
+
+1. **Encapsulated Providers**: Never export `Context` objects directly. Only export the `Provider` component and its corresponding custom hook.
+2. **Type-Safe Hooks**: All context consumption must happen through a custom hook (e.g., `useAuth()`) that throws a descriptive error if used outside its Provider.
+3. **Granular Reactivity**: Use `createStore` or `createSignal` inside the Provider function to ensure state is scoped correctly to the component tree.
+4. **Logic Location**: Keep complex business logic inside the Provider file to keep consumer components "dumb" and focused on rendering.
+
+## Project Structure Awareness
+- `/src/context`: All global state following the `solidjs-context-llms` pattern.
+- `/.continue/rules`: Mandatory AI instructions for codebase consistency.
+- `projectRoadmap.md`: High-level goals and current refactoring focus.
