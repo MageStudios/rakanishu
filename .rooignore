@@ -64,3 +64,14 @@ yarn-debug.log*
 yarn-error.log*
 .eslintcache
 .stylelintcache
+
+# --- Lock Files (never useful in context) ---
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# --- Snippets (large, rarely needed in context) ---
+.roo/snipplets/
+
+# --- Roomodes (loaded by Roo automatically, no need in context) ---
+.roomodes

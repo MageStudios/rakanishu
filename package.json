@@ -1,7 +1,7 @@
 {
   "name": "rakanishu-solidjs-game",
   "description": "SolidJS-based idle RPG game. Uses SolidJS stores, NOT React.",
-  "keywords": ["solidjs", "game", "tailwind", "NOT-react"]
+  "keywords": ["solidjs", "game", "tailwind", "NOT-react"],
   "version": "0.0.1",
   "scripts": {
     "start": "vite",
