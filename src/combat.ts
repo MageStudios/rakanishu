@@ -84,11 +84,11 @@ export function initializeCombat(
  * Both player and ALL enemies attack simultaneously
  */
 export function resolveCombatTick(
-  combatState: typeof combatState,
+  combatStateRef: typeof combatState,
   playerStats: Player,
 ): { hitsDealt: number; damageDealtToPlayer?: number } {
-  const state = combatState;
   let hitsDealt = 0;
+  let totalDamageToPlayer = 0;
 
   // Use batch for performance - single DOM update per tick regardless of enemy count
   batch(() => {
@@ -96,23 +96,22 @@ export function resolveCombatTick(
     // PHASE 1: Start of tick - Handle respawns
     // ------------------------------------------------------------------------
     
-    for (let i = 0; i < state.enemies.length; i++) {
-      const enemy = state.enemies[i];
+    for (let i = 0; i < combatStateRef.enemies.length; i++) {
+      const enemy = combatStateRef.enemies[i];
 
       // Check respawn timer first - spawn new monster if ready
-      if (enemy.respawnTimer !== undefined) {
-        enemy.respawnTimer--;
+      if (enemy.respawnTimer !== undefined && enemy.respawnTimer > 0) {
+        setCombatState("enemies", i, "respawnTimer", (timer) => timer! - 1);
 
-        if (enemy.respawnTimer <= 0) {
+        if (combatStateRef.enemies[i].respawnTimer === 0) {
           // Reset HP to maxHp - ENEMY SPAWNS!
-          state.set("enemies", i, {
+          setCombatState("enemies", i, {
             ...enemy,
             currentHp: enemy.maxHp,
             respawnTimer: 0,
           });
-          continue;
         }
-        // If respawnTimer > 0, it's already decremented above - enemy stays dead
+        continue;
       }
     }
 
@@ -120,24 +119,19 @@ export function resolveCombatTick(
     // PHASE 2: Enemy attacks player (all enemies with HP > 0)
     // ------------------------------------------------------------------------
 
-    let totalDamageToPlayer = 0;
-
-    state.enemies.forEach((enemy) => {
+    combatStateRef.enemies.forEach((enemy) => {
       // Only attacking enemies that are alive
       if (enemy.currentHp <= 0) return;
 
       // Apply damage to player
       const damageDealt = Math.max(1, enemy.damage);
       totalDamageToPlayer += damageDealt;
-
-      // Update player HP (will be applied by caller)
     });
 
     if (totalDamageToPlayer > 0) {
-      state.set("playerStats", "hp", (currentHp, maxHp) => {
-        const newHp = Math.max(0, currentHp - totalDamageToPlayer);
-        return { ...{ hp: newHp }, maxHp };
-      });
+      setCombatState("playerStats", "hp", (currentHp) => 
+        Math.max(0, currentHp - totalDamageToPlayer)
+      );
     }
 
     // ------------------------------------------------------------------------
@@ -146,10 +140,14 @@ export function resolveCombatTick(
 
     const playerDamage = playerStats.damage;
 
-    state.enemies.forEach((enemy) => {
+    combatStateRef.enemies.forEach((enemy, index) => {
       if (enemy.currentHp <= 0 && enemy.respawnTimer === undefined) {
-        // Enemy already dead and not respawning - remove from combat
-        state.set("enemies", enemy.enemyIndex, null);
+        // Enemy already dead and not respawning - mark for removal
+        return;
+      }
+
+      if (enemy.currentHp <= 0) {
+        // Enemy is dead but respawning
         return;
       }
 
@@ -158,10 +156,13 @@ export function resolveCombatTick(
       let damageDealt = Math.max(1, Math.floor(playerDamage * xpMultiplier));
 
       // Apply damage to enemy
-      state.set("enemies", enemy.enemyIndex, {
-        ...enemy,
-        currentHp: Math.max(0, enemy.currentHp - damageDealt),
-      });
+      const newHp = Math.max(0, enemy.currentHp - damageDealt);
+      setCombatState("enemies", index, "currentHp", newHp);
+
+      // If enemy just died, set respawn timer
+      if (newHp === 0 && enemy.currentHp > 0) {
+        setCombatState("enemies", index, "respawnTimer", RESPAWN_TICKS);
+      }
 
       // Track hits for UI
       hitsDealt++;
@@ -171,14 +172,19 @@ export function resolveCombatTick(
     // PHASE 4: Check for player death
     // ------------------------------------------------------------------------
 
-    const currentPlayerHp = state.get("playerStats", "hp") as number;
+    const currentPlayerHp = combatStateRef.playerStats.hp;
     if (currentPlayerHp <= 0) {
-      state.set("playerStats", "hp", playerStats.maxHp); // Respawn
+      setCombatState("playerStats", "hp", playerStats.maxHp); // Respawn
       throw new Error("Player died! Combat ending.");
     }
+
+    // Remove dead enemies without respawn timers
+    setCombatState("enemies", (enemies) => 
+      enemies.filter((e) => e.currentHp > 0 || e.respawnTimer !== undefined)
+    );
   });
 
-  state.tickCount++;
+  setCombatState("tickCount", (count) => count + 1);
 
   return { hitsDealt, damageDealtToPlayer: totalDamageToPlayer };
 }
@@ -259,8 +265,9 @@ function getEnemyData(type: EnemyType): { name: string; baseHp: number; damage: 
 /**
  * Calculate XP multiplier based on level difference
  */
-export function getXpMultiplier(enemy: Enemy, playerStats: Player): number {
-  const diff = enemy.level - playerStats.level;
+export function getXpMultiplier(enemy: CombatEnemy | Enemy, playerStats: Player): number {
+  const enemyLevel = 'level' in enemy ? enemy.level : 1;
+  const diff = enemyLevel - playerStats.level;
   if (diff <= 0) return 1.0; // Same or weaker
   return 1.0 - (diff * 0.05); // Penalty for facing stronger enemies
 }
@@ -268,8 +275,9 @@ export function getXpMultiplier(enemy: Enemy, playerStats: Player): number {
 /**
  * Calculate gold multiplier based on level difference
  */
-export function getGoldMultiplier(enemy: Enemy, playerStats: Player): number {
-  const diff = enemy.level - playerStats.level;
+export function getGoldMultiplier(enemy: CombatEnemy | Enemy, playerStats: Player): number {
+  const enemyLevel = 'level' in enemy ? enemy.level : 1;
+  const diff = enemyLevel - playerStats.level;
   if (diff <= 0) return 1.2; // Bonus for facing weaker enemies
   return 0.8 - (diff * 0.01); // Penalty for facing stronger enemies
 }
@@ -282,8 +290,8 @@ export function getGoldMultiplier(enemy: Enemy, playerStats: Player): number {
  * Main combat loop effect - runs every COMBAT_TICK_MS
  */
 export function createCombatLoop(
-  gameState: typeof gameState,
-  combatState: typeof combatState
+  gameState: GameState,
+  combatStateRef: typeof combatState
 ): () => void {
   let animationFrameId: number;
 
@@ -293,45 +301,40 @@ export function createCombatLoop(
     const now = performance.now();
     
     // Skip if not enough time has passed (fixed timestep)
-    if (now - combatState.lastTickTime < COMBAT_TICK_MS) {
+    if (now - combatStateRef.lastTickTime < COMBAT_TICK_MS) {
       animationFrameId = requestAnimationFrame(tick);
       return;
     }
 
     // Reset timestamp for next tick
-    combatState.lastTickTime = now;
-    combatState.tickCount++;
+    setCombatState("lastTickTime", now);
 
     // Get current player stats (reactive)
-    const playerStats = gameState.get("player") as Player;
+    const playerStats = gameState.player;
 
     try {
       // Resolve one tick of combat (WHIRLWIND AoE)
-      resolveCombatTick(combatState, playerStats);
+      resolveCombatTick(combatStateRef, playerStats);
     } catch (e) {
       // Player died - end game
-      gameState.set("isGameOver", true);
-      gameState.set("gameState", "LOST");
+      console.error("Combat error:", e);
+      // Handle game over state here
     }
 
     // Check for victory after each tick
     if (checkVictory(gameState, playerStats)) {
-      gameState.set("gameState", "WON");
+      console.log("Victory!");
+      // Handle victory state here
     }
 
     animationFrameId = requestAnimationFrame(tick);
   };
 
-  // Start the loop when game starts
-  gameState.set("isPlaying", (value: boolean) => {
-    if (value) {
-      combatState.lastTickTime = performance.now();
-      animationFrameId = requestAnimationFrame(tick);
-    } else {
-      cancelAnimationFrame(animationFrameId);
-    }
-  });
+  // Start the loop
+  setCombatState("lastTickTime", performance.now());
+  animationFrameId = requestAnimationFrame(tick);
 
+  // Return cleanup function
   return () => {
     cancelAnimationFrame(animationFrameId);
   };
@@ -341,23 +344,13 @@ export function createCombatLoop(
  * Handle player death and respawn (for testing/playtesting)
  */
 export function handlePlayerDeath(
-  gameState: typeof gameState,
-  combatState: typeof combatState
+  playerMaxHp: number
 ): void {
-  const playerStats = combatState.playerStats;
-
   // Respawn player at max HP
-  combatState.set("playerStats", "hp", (currentHp, maxHp) => {
-    return { ...{ hp: maxHp }, maxHp };
-  });
+  setCombatState("playerStats", "hp", playerMaxHp);
 
   // Remove all defeated enemies (respawn timers will reset them)
-  const aliveEnemies: CombatEnemy[] = [];
-  combatState.enemies.forEach((enemy) => {
-    if (enemy.currentHp > 0 || enemy.respawnTimer !== undefined) {
-      aliveEnemies.push(enemy);
-    }
-  });
-
-  combatState.set("enemies", reconcile, aliveEnemies);
+  setCombatState("enemies", (enemies) => 
+    enemies.filter((enemy) => enemy.currentHp > 0 || enemy.respawnTimer !== undefined)
+  );
 }

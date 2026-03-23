@@ -1,3 +1,12 @@
+# ⚠️ CRITICAL: THIS IS A SOLIDJS PROJECT, NOT REACT ⚠️
+
+Before reading anything else: This codebase uses SolidJS, which looks similar to React but has COMPLETELY DIFFERENT reactive semantics. 
+
+**If you use React patterns, the app WILL break.**
+
+Read `.roo/rules/gothic-solid-spec.md` before writing ANY code.
+
+---
 # AGENTS.md (SolidJS Repository Standard)
 
 Scope: entire repository.

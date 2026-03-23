@@ -1,3 +1,32 @@
+// ============================================================================
+// ⚠️  SINGLE SOURCE OF TRUTH - READ THIS FIRST  ⚠️
+// ============================================================================
+//
+// This file is the SINGLE SOURCE OF TRUTH for ALL game data.
+//
+// RULES:
+// 1. ALL game state lives here (player, enemies, loot, inventory, combat log)
+// 2. ALL components read from `gameState` directly (no local copies)
+// 3. ALL mutations use `setGameState()` or helper functions
+// 4. DO NOT create duplicate state in components or other files
+// 5. DO NOT use Context providers for game state (use direct imports)
+//
+// ARCHITECTURE:
+// - gameState = Persistent game data (saves to localStorage)
+// - combatState = Temporary combat data (resets each wave)
+//
+// USAGE:
+//   import { gameState, setGameState, addLootDrop } from './gameState';
+//   
+//   // Read (reactive):
+//   <p>Gold: {gameState.player.gold}</p>
+//   
+//   // Write:
+//   setGameState("player", "gold", (g) => g + 50);
+//   addLootDrop(item, 50);
+//
+// ============================================================================
+
 import { createStore, reconcile } from "solid-js/store";
 
 // ============================================================================
@@ -14,11 +43,46 @@ export interface Enemy {
   xpReward: number;
   goldReward: number;
   type: "Slime" | "Rat" | "Goblin" | "Wolf" | "Skeleton" | "Orc" | "Dragon";
-  // Respawn tracking
   respawnTimer?: number; // in ticks (0 = ready to spawn)
 }
 
 export type EnemyType = "Slime" | "Rat" | "Goblin" | "Wolf" | "Skeleton" | "Orc" | "Dragon";
+
+export interface Item {
+  id: string;
+  name: string;
+  type: "weapon" | "armor" | "consumable";
+  rarity: "common" | "magic" | "rare" | "unique";
+  value: number;
+  damage?: number;
+  armor?: number;
+}
+
+export interface LootDrop {
+  id: string;
+  timestamp: Date;
+  item: Item;
+  goldValue: number;
+}
+
+export interface Hireling {
+  id: string;
+  name?: string;
+  type: "fighter" | "merchant" | "none";
+}
+
+export interface Assistant {
+  id: string;
+  name: string;
+  type: "auto-seller" | "potion-giver";
+  active: boolean;
+  color: string;
+  settings?: {
+    goldPerInterval: number;
+    intervalSeconds: number;
+    potionAmount: number;
+  };
+}
 
 export interface Player {
   name: string;
@@ -33,16 +97,36 @@ export interface Player {
   enemiesDefeated: number;
   wavesCompleted: number;
   totalKills: number;
+  // Hirelings and Assistants
+  hirelings: Hireling[];
+  assistants: Assistant[];
 }
 
 export interface GameState {
+  // Meta
   isPlaying: boolean;
   isGameOver: boolean;
   gameState: "START" | "PLAYING" | "WON" | "LOST";
+  saveVersion: number; // For future migrations
+  
+  // Player
   player: Player;
+  
+  // Combat
   currentEnemyIndex: number; // -1 means no enemy active
   enemies: Enemy[];
   totalWaves: number;
+  
+  // Loot
+  lootDrops: LootDrop[];
+  inventory: Record<string, number>; // itemId -> quantity
+  
+  // Combat Log
+  combatLog: {
+    timestamp: string; // ISO date
+    type: "damage" | "heal" | "gold" | "xp" | "loot";
+    message: string;
+  }[];
 }
 
 export const TOTAL_WAVES = 50;
@@ -64,6 +148,12 @@ const defaultPlayer: Player = {
   enemiesDefeated: 0,
   wavesCompleted: 0,
   totalKills: 0,
+  hirelings: [
+    { id: "h1", type: "none" },
+    { id: "h2", type: "none" },
+    { id: "h3", type: "none" },
+  ],
+  assistants: [],
 };
 
 const enemyDatabase: Record<EnemyType, { name: string; baseHp: number; damage: number; xpReward: number; goldReward: number }> = {
@@ -84,10 +174,14 @@ export const [gameState, setGameState] = createStore<GameState>({
   isPlaying: false,
   isGameOver: false,
   gameState: "START",
+  saveVersion: 1,
   player: { ...defaultPlayer },
   currentEnemyIndex: -1,
   enemies: [],
   totalWaves: TOTAL_WAVES,
+  lootDrops: [],
+  inventory: {},
+  combatLog: [],
 });
 
 // ============================================================================
@@ -136,7 +230,7 @@ export function getWaveEnemies(waveIndex: number): Enemy[] {
     const scaleFactor = Math.min(1.5, waveMultiplier * (0.9 + 1 * 0.05)); // Base level 1 for spawn enemies
     
     const enemy: Enemy = {
-      id: Date.now() + waveIndex,
+      id: Date.now() + waveIndex + types.indexOf(type),
       name: enemyTypeData.name,
       maxHp: Math.floor(enemyTypeData.baseHp * scaleFactor),
       currentHp: enemyTypeData.baseHp * scaleFactor,
@@ -176,6 +270,12 @@ export function calculatePlayerStatsForLevel(level: number): Player {
     enemiesDefeated: 0,
     wavesCompleted: 0,
     totalKills: 0,
+    hirelings: [
+      { id: "h1", type: "none" },
+      { id: "h2", type: "none" },
+      { id: "h3", type: "none" },
+    ],
+    assistants: [],
   };
 }
 
@@ -202,4 +302,133 @@ export function getGoldMultiplier(enemyLevel: number, playerLevel: number): numb
   const diff = enemyLevel - playerLevel;
   if (diff <= 0) return 1.2; // Bonus for facing weaker enemies
   return 0.8 - (diff * 0.01); // Penalty for facing stronger enemies
+}
+
+// ============================================================================
+// LOOT SYSTEM
+// ============================================================================
+
+/**
+ * Add a loot drop to the log
+ */
+export function addLootDrop(item: Item, goldValue: number): void {
+  const drop: LootDrop = {
+    id: `loot-${Date.now()}`,
+    timestamp: new Date(),
+    item,
+    goldValue,
+  };
+  
+  setGameState("lootDrops", (drops) => [...drops, drop]);
+  
+  // Add to inventory
+  setGameState("inventory", item.id, (count = 0) => count + 1);
+  
+  // Add to combat log
+  addCombatLog("loot", `Found ${item.name} (${item.rarity})!`);
+}
+
+/**
+ * Clear all loot drops
+ */
+export function clearLootDrops(): void {
+  setGameState("lootDrops", []);
+}
+
+// ============================================================================
+// COMBAT LOG
+// ============================================================================
+
+/**
+ * Add entry to combat log
+ */
+export function addCombatLog(
+  type: "damage" | "heal" | "gold" | "xp" | "loot",
+  message: string
+): void {
+  const entry = {
+    timestamp: new Date().toISOString(),
+    type,
+    message,
+  };
+  
+  setGameState("combatLog", (log) => [...log, entry].slice(-100)); // Keep last 100 entries
+}
+
+// ============================================================================
+// PERSISTENCE (LocalStorage)
+// ============================================================================
+
+const SAVE_KEY = "rakanishu";
+
+/**
+ * Save game state to localStorage
+ */
+export function saveGame(): void {
+  try {
+    const saveData = {
+      version: gameState.saveVersion,
+      player: gameState.player,
+      lootDrops: gameState.lootDrops.map((drop) => ({
+        ...drop,
+        timestamp: drop.timestamp.toISOString(), // Convert Date to string
+      })),
+      inventory: gameState.inventory,
+      combatLog: gameState.combatLog.slice(-50), // Save last 50 entries
+    };
+    
+    localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
+  } catch (error) {
+    console.error("Failed to save game:", error);
+  }
+}
+
+/**
+ * Load game state from localStorage
+ */
+export function loadGame(): boolean {
+  try {
+    const saveData = localStorage.getItem(SAVE_KEY);
+    if (!saveData) return false;
+    
+    const parsed = JSON.parse(saveData);
+    
+    // Hydrate with reconcile to preserve reactivity
+    setGameState("player", reconcile(parsed.player));
+    setGameState("inventory", reconcile(parsed.inventory));
+    setGameState("combatLog", reconcile(parsed.combatLog));
+    
+    // Convert timestamp strings back to Date objects
+    const lootDrops = parsed.lootDrops.map((drop: any) => ({
+      ...drop,
+      timestamp: new Date(drop.timestamp),
+    }));
+    setGameState("lootDrops", reconcile(lootDrops));
+    
+    return true;
+  } catch (error) {
+    console.error("Failed to load game:", error);
+    return false;
+  }
+}
+
+/**
+ * Reset game to default state
+ */
+export function resetGame(): void {
+  setGameState(reconcile({
+    isPlaying: false,
+    isGameOver: false,
+    gameState: "START",
+    saveVersion: 1,
+    player: { ...defaultPlayer },
+    currentEnemyIndex: -1,
+    enemies: [],
+    totalWaves: TOTAL_WAVES,
+    lootDrops: [],
+    inventory: {},
+    combatLog: [],
+  }));
+  
+  localStorage.removeItem(SAVE_KEY);
 }
