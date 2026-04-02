@@ -1,7 +1,12 @@
 {
   "name": "rakanishu-solidjs-game",
   "description": "SolidJS-based idle RPG game. Uses SolidJS stores, NOT React.",
-  "keywords": ["solidjs", "game", "tailwind", "NOT-react"],
+  "keywords": [
+    "solidjs",
+    "game",
+    "tailwind",
+    "NOT-react"
+  ],
   "version": "0.0.1",
   "scripts": {
     "start": "vite",
@@ -12,6 +17,11 @@
   "license": "MIT",
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.13",
+    "@typescript-eslint/eslint-plugin": "^8.57.2",
+    "@typescript-eslint/parser": "^8.57.2",
+    "eslint": "^9.39.4",
+    "eslint-plugin-solid": "^0.14.5",
+    "globals": "^17.4.0",
     "solid-devtools": "^0.34.3",
     "tailwindcss": "^4.1.13",
     "typescript": "^5.9.2",
@@ -19,6 +29,6 @@
     "vite-plugin-solid": "^2.11.8"
   },
   "dependencies": {
-    "solid-js": "^1.9.9"
+    "solid-js": "^1.9.12"
   }
 }

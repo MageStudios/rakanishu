@@ -1,1 +1,20 @@
-@import 'tailwindcss';
+@import "tailwindcss";
+
+@theme {
+  /* This creates utilities like bg-obsidian, text-obsidian, etc. */
+  --color-obsidian: #0a0a0c;
+  --color-iron: #1a1a1a;
+  --color-blood-red: #4a0404;
+  --color-dried-blood: #2d0202;
+  --color-silver-mist: #d1d1d1;
+
+  /* Custom spacing or shadows for that Gothic look */
+  --shadow-glow-red: 0 0 15px rgba(74, 4, 4, 0.6);
+  --font-gothic: "Crimson Text", serif;
+}
+
+@layer base {
+  body {
+    @apply bg-obsidian text-silver-mist font-gothic;
+  }
+}

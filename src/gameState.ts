@@ -1,4 +1,13 @@
-import { createSignal } from 'solid-js';
+import { createStore } from 'solid-js/store';
+
+// 1. Define the Interfaces
+interface InventoryItem {
+  id: string;
+  name: string;
+  type: 'weapon' | 'armor' | 'accessory';
+  rarity: 'normal' | 'magic' | 'rare' | 'set' | 'unique';
+  stats: Record<string, number>;
+}
 
 interface Player {
   hp: number;
@@ -7,14 +16,6 @@ interface Player {
   level: number;
   inventory: InventoryItem[];
   achievements: string[];
-}
-
-interface InventoryItem {
-  id: string;
-  name: string;
-  type: 'weapon' | 'armor' | 'accessory';
-  rarity: 'normal' | 'magic' | 'rare' | 'set' | 'unique';
-  stats: Record<string, number>;
 }
 
 interface Combatant {
@@ -26,7 +27,8 @@ interface Combatant {
   defense: number;
 }
 
-export const [gameState, setGameState] = createSignal<{
+// 2. Define the Master State Interface (The Blueprint)
+interface GameState {
   player: Player;
   inventory: InventoryItem[];
   combatLog: string[];
@@ -34,7 +36,10 @@ export const [gameState, setGameState] = createSignal<{
     npcs: Combatant[];
     enemies: Combatant[];
   };
-}>({
+}
+
+// 3. Initialize the Store with the <GameState> type
+export const [gameState, setGameState] = createStore<GameState>({
   player: {
     hp: 100,
     gold: 0,
@@ -51,10 +56,14 @@ export const [gameState, setGameState] = createSignal<{
   }
 });
 
+// 4. Update functions (Note: gameState is now an object, not a function call!)
 export function addLootDrop(item: InventoryItem) {
-  setGameState('inventory', [...gameState().inventory, { ...item, id: crypto.randomUUID() }]);
+  setGameState('inventory', (inv) => [
+    ...inv, 
+    { ...item, id: crypto.randomUUID() }
+  ]);
 }
 
 export function addCombatLog(message: string) {
-  setGameState('combatLog', [...gameState().combatLog, message]);
+  setGameState('combatLog', (logs) => [...logs, message]);
 }

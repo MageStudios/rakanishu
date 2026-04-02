@@ -1,0 +1,31 @@
+{
+  "profiles": [
+    {
+      "name": "Gothic-Local-High-Context",
+      "provider": { 
+        "openai-compatible": {
+          "baseURL": "http://localhost/v1"
+        } 
+
+      },
+      "maxContextTokens": 16384, 
+      "maxOutputTokens": 4096,
+      "model": [
+        {
+          "id": "qwen3.5-4b-mlx",
+          "name": "Qwen-4B-16k"
+        }
+      ]
+    }
+  ],
+  "roles": {
+    "orchestrator": {
+      "profile": "Gothic-Local-High-Context",
+      "model": "qwen3.5-4b-mlx",
+      // This forces it to read your rules before it even thinks about code
+      "instructions": [
+        "agents.md"
+      ]
+    }
+  }
+}
