@@ -1,20 +1,111 @@
-@import "tailwindcss";
+/**
+ * Gothic Incremental Game UI Theme
+ * Obsidian Dark / Bone / Blood-Red Palette
+ */
 
-@theme {
-  /* This creates utilities like bg-obsidian, text-obsidian, etc. */
-  --color-obsidian: #0a0a0c;
-  --color-iron: #1a1a1a;
-  --color-blood-red: #4a0404;
-  --color-dried-blood: #2d0202;
-  --color-silver-mist: #d1d1d1;
-
-  /* Custom spacing or shadows for that Gothic look */
-  --shadow-glow-red: 0 0 15px rgba(74, 4, 4, 0.6);
-  --font-gothic: "Crimson Text", serif;
+/* RESET & BASE */
+* {
+  box-sizing: border-box;
 }
 
-@layer base {
-  body {
-    @apply bg-obsidian text-silver-mist font-gothic;
-  }
+body {
+  margin: 0;
+  font-family: 'Cinzel', serif; /* Gothic font */
+  background-color: #0a0a0a; /* Obsidian */
+  color: #e2dac2; /* Bone text default */
+}
+
+/* LAYOUT CONTAINER - 3 COLUMN SYSTEM */
+.app-container {
+  display: grid;
+  grid-template-columns: 25% 50% 25%;
+  min-height: 100vh;
+  border: 2px solid #880808; /* Blood-Red panel borders */
+  background-color: #1a1a1a; /* Panel base */
+}
+
+/* LEFT COLUMN - SKILL TREE / STATS */
+.left-column {
+  border-right: 2px solid #880808;
+  background-color: #1a1a1a;
+  padding: 2rem;
+}
+
+/* CENTER COLUMN - COMBAT VIEW */
+.center-column {
+  border-right: 2px solid #880808;
+  background-color: #1a1a1a;
+  padding: 2rem;
+}
+
+/* RIGHT COLUMN - LOGS / COMBAT RESULTS */
+.right-column {
+  background-color: #1a1a1a;
+  padding: 2rem;
+}
+
+/* COMPONENT CLASSES */
+.panel {
+  border: 1px solid #880808;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.combat-log {
+  font-family: 'Consolas', monospace; /* Tech font for combat logs */
+  color: #880808; /* Blood-red text for combat logs */
+  font-size: 0.9rem;
+}
+
+.combat-log .damage-crit {
+  color: #ffffff; /* White for critical hits */
+}
+
+.combat-log .player-death {
+  color: #880808; /* Blood-red for death */
+}
+
+/* UTILITIES - BANNED DEFAULT GRAYS */
+.text-bone {
+  color: #e2dac2;
+}
+
+.bg-obsidian {
+  background-color: #0a0a0a;
+}
+
+.bg-panel {
+  background-color: #1a1a1a;
+}
+
+/* ANIMATIONS - TICKER DRIVEN (NO MANUAL CLICKS) */
+@keyframes damage-flash {
+  0% { background-color: #880808; }
+  100% { opacity: 0; }
+}
+
+.damage-flash {
+  animation: damage-flash 0.5s ease-out forwards;
+}
+
+@keyframes blood-drip {
+  0% { height: 0; }
+  100% { height: 1rem; }
+}
+
+.blood-drip {
+  animation: blood-drip 1s ease-out forwards;
+}
+
+/* TYPE SCROLLBAR - TECH/GOthic */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #880808;
 }

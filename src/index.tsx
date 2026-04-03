@@ -3,6 +3,9 @@
 import { createSignal, createEffect, onCleanup } from 'solid-js';
 import { render } from 'solid-js/web';
 
+// Import the GameShell component
+import { GameShell } from './App';
+
 // Define the Gothic UI theme
 const theme = {
   background: '#0a0a0c',
@@ -11,32 +14,28 @@ const theme = {
   fontFamily: 'Serif, Monospace'
 };
 
-// Create a signal for the count
-const [count, setCount] = createSignal(0);
+// Initialize game state (module-level)
+import { gameState } from '../state/gameState';
 
-// Create an effect to update the count
+// Start the game loop (ticker-driven)
 createEffect(() => {
-  console.log('Count updated:', count());
-});
+  const intervalId = setInterval(() => {
+    // Advance game tick
+    gameState.tick();
+  }, 100); // Tick every 100ms
 
-// Cleanup function for setInterval
-let intervalId: number | null = null;
-
-onCleanup(() => {
-  if (intervalId) {
+  onCleanup(() => {
     clearInterval(intervalId);
-  }
+  });
 });
 
-// Set up an interval to update the count
-intervalId = setInterval(() => {
-  setCount(count() + 1);
-}, 1000);
+// Render root component
+const Root = () => {
+  return (
+    <div style={{ background: theme.background, color: '#e2dac2', "font-family": theme.fontFamily }}>
+      <GameShell />
+    </div>
+  );
+};
 
-// Render the component
-render(() => (
-  <div style={{ background: theme.background, color: theme.accent, "font-family": theme.fontFamily, padding: '20px' }}>
-    <h1>Gothic UI Example</h1>
-    <p>Count: {count()}</p>
-  </div>
-), document.getElementById('root')!);
+render(<Root />, document.getElementById('root')!);

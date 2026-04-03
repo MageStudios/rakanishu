@@ -1,0 +1,25 @@
+# Dependency Noise
+node_modules/
+dist/
+build/
+.cache/
+
+# Environment & Secrets
+.env
+.env.*
+*.pem
+*.key
+secrets.json
+
+# Git & Logs
+.git/
+*.log
+npm-debug.log*
+
+# OS Junk
+.DS_Store
+Thumbs.db
+
+# Project-Specific (Optional)
+# If you have a massive assets folder with just images/mp3s:
+public/assets/

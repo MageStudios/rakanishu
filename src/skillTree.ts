@@ -1,5 +1,5 @@
 import { createEffect, createMemo } from 'solid-js';
-import { setGameState } from './gameState';
+import { setGameState } from '../state/gameState';
 
 // Define Skill Tree Interface
 interface Skill {
