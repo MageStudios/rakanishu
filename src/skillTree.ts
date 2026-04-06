@@ -1,173 +1,202 @@
-import { createEffect, createMemo } from 'solid-js';
-import { setGameState } from '../state/gameState';
+/* @refresh reload */
+/**
+ * skillTree.ts — D2-Style Skill Tree with Combat Skill Support
+ *
+ * Each class/skill tree contains passive stat bonuses **and** active
+ * combat skills that feed into the combat engine (multi-hit, effects).
+ */
+import { createStore } from 'solid-js/store';
 
-// Define Skill Tree Interface
-interface Skill {
+// ─── Active Combat Skill Effects ───
+export type SkillEffect = 'CHILL' | 'STUN' | 'LIFESTEAL' | 'MANADRAIN' | 'POISON' | 'NONE';
+
+// ─── Active Combat Skill ───
+export interface CombatSkill {
+  /** Unique identifier */
+  id: string;
+  /** Display name */
+  name: string;
+  /** Mana cost to activate (0 for mercenary skills) */
+  cost: number;
+  /** Number of hits per cast (1 = single strike, 3 = triple like Jab) */
+  hits: number;
+  /** Damage multiplier per hit (0.8 = 80% base damage per hit) */
+  damageModifier: number;
+  /** Secondary effect (CHILL, STUN, etc.) — 'NONE' for pure damage */
+  effect: SkillEffect;
+  /** If effect has a magnitude (e.g., CHILL slowAmount: 0.3 = 30% slow) */
+  slowAmount?: number;
+  /** Effect duration in ms (e.g., 3000ms = 3 seconds of slow) */
+  duration?: number;
+  /** Icon / visual tag */
+  icon: string;
+}
+
+// ─── Passive Skill Node ───
+export interface SkillNode {
   id: string;
   name: string;
   description: string;
   type: 'attack' | 'defense' | 'passive' | 'utility';
-  cost: number; // Cost in gold or experience
-  baseValue: number;
-  multiplier: number; // Multiplier applied to stats
-  active: boolean;
-  level: number; // Level of the skill (1-5)
-}
-
-// Define Skill Tree Structure (e.g., 'Attack Tree')
-interface SkillTree {
-  name: string;
-  description: string;
-  skills: Skill[];
+  /** Stat bonus per level */
+  bonusPerLevel: number;
+  /** Stat this skill affects */
+  statKey: 'strength' | 'agility' | 'intellect' | 'defense' | 'allResist' | 'maxHp' | 'manaRegen' | 'magicFind';
+  currentLevel: number;
+  maxLevel: number;
   unlocked: boolean;
-  level: number; // 1-5
+  /** Prerequisite: other skill node IDs that must be unlocked first */
+  requires?: string[];
 }
 
-// Global Skill Tree State
-export const [skillTreeState, setSkillTreeState] = createStore<Record<string, SkillTree>>({
-  'attack': {
-    name: 'Attack Power',
-    description: 'Enhance your attack strength and damage output.',
-    skills: [
+// ─── Skill Tree ───
+export interface SkillTree {
+  name: string;
+  className: string; // 'amazon' | 'rogue' | 'paladin' etc.
+  passiveNodes: SkillNode[];
+  combatSkills: CombatSkill[];
+  unlocked: boolean;
+}
+
+// ─── Global Store ───
+export const [skillTrees, setSkillTrees] = createStore<Record<string, SkillTree>>({
+  amazon: {
+    name: 'Amazon',
+    className: 'amazon',
+    passiveNodes: [
+      { id: 'amazon_spear', name: 'Spear Mastery', description: '+10% spear damage per level', type: 'attack', bonusPerLevel: 0.10, statKey: 'strength', currentLevel: 0, maxLevel: 5, unlocked: true },
+      { id: 'amazon_bow', name: 'Bow Mastery', description: '+10% bow damage per level', type: 'attack', bonusPerLevel: 0.10, statKey: 'strength', currentLevel: 0, maxLevel: 5, unlocked: true },
+      { id: 'amazon_passive', name: 'Critical Strike', description: '+5% critical chance per level', type: 'passive', bonusPerLevel: 0.05, statKey: 'agility', currentLevel: 0, maxLevel: 5, unlocked: true },
+    ],
+    combatSkills: [
+      // ── Jab (Amazon): 2 Mana, 3 hits, 0.8x per hit ──
       {
-        id: 'attack1',
-        name: 'Fist Strike',
-        description: 'Basic melee attack with increased damage.',
-        type: 'attack',
-        cost: 50,
-        baseValue: 10,
-        multiplier: 1.2,
-        active: false,
-        level: 1
+        id: 'amazon_jab',
+        name: 'Jab',
+        cost: 2,
+        hits: 3,
+        damageModifier: 0.8,
+        effect: 'NONE',
+        icon: '⚔️',
       },
-      {
-        id: 'attack2',
-        name: 'Rage Attack',
-        description: 'Deal extra damage when HP is below 30%.',
-        type: 'attack',
-        cost: 100,
-        baseValue: 15,
-        multiplier: 1.5,
-        active: false,
-        level: 1
-      }
     ],
-    unlocked: true,
-    level: 1
+    unlocked: false,
   },
-  'defense': {
-    name: 'Defense Mastery',
-    description: 'Improve your defense and reduce incoming damage.',
-    skills: [
-      {
-        id: 'defense1',
-        name: 'Shield Block',
-        description: 'Block incoming attacks with a shield.',
-        type: 'defense',
-        cost: 75,
-        baseValue: 5,
-        multiplier: 0.8,
-        active: false,
-        level: 1
-      }
+
+  rogue: {
+    name: 'Rogue Mercenary',
+    className: 'rogue',
+    passiveNodes: [
+      { id: 'rogue_fire', name: 'Fire Arrow', description: '+15% fire damage per level', type: 'attack', bonusPerLevel: 0.15, statKey: 'strength', currentLevel: 0, maxLevel: 5, unlocked: true },
+      { id: 'rogue_cold_passive', name: 'Cold Mastery', description: '+10% effect duration per level', type: 'passive', bonusPerLevel: 0.10, statKey: 'intellect', currentLevel: 0, maxLevel: 5, unlocked: true },
+      { id: 'rogue_defense', name: 'Inner Sight', description: '-8% enemy defense per level', type: 'passive', bonusPerLevel: -0.08, statKey: 'defense', currentLevel: 0, maxLevel: 5, unlocked: true },
     ],
-    unlocked: true,
-    level: 1
-  }
+    combatSkills: [
+      // ── Cold Arrow (Rogue Merc): 0 cost, CHILL, 30% slow, 3s ──
+      {
+        id: 'rogue_cold_arrow',
+        name: 'Cold Arrow',
+        cost: 0,
+        hits: 1,
+        damageModifier: 1.0,
+        effect: 'CHILL',
+        slowAmount: 0.3,
+        duration: 3000,
+        icon: '🧊',
+      },
+      // ── Fire Arrow: standard damage ──
+      {
+        id: 'rogue_fire_arrow',
+        name: 'Fire Arrow',
+        cost: 0,
+        hits: 1,
+        damageModifier: 1.2,
+        effect: 'NONE',
+        icon: '🔥',
+      },
+    ],
+    unlocked: false,
+  },
+
+  paladin: {
+    name: 'Paladin',
+    className: 'paladin',
+    passiveNodes: [
+      { id: 'paladin_def', name: 'Defiance', description: '+12% defense per level', type: 'defense', bonusPerLevel: 0.12, statKey: 'defense', currentLevel: 0, maxLevel: 5, unlocked: true },
+      { id: 'paladin_might', name: 'Might', description: '+10% damage per level', type: 'attack', bonusPerLevel: 0.10, statKey: 'strength', currentLevel: 0, maxLevel: 5, unlocked: true },
+    ],
+    combatSkills: [],
+    unlocked: false,
+  },
 });
 
-// Function to upgrade a skill
-export function upgradeSkill(skillId: string, skillTreeName: string, amount: number) {
-  const tree = skillTreeState[skillTreeName];
-  if (!tree) return;
-  
-  const skill = tree.skills.find(s => s.id === skillId);
-  if (!skill) return;
-  
-  // Apply level up logic
-  const newLevel = Math.min(5, skill.level + amount);
-  const newBaseValue = skill.baseValue * (1 + (newLevel - 1) * skill.multiplier);
-  
-  // Update skill level and value
-  setGameState('player', (player) => ({
-    ...player,
-    stats: {
-      ...player.stats,
-      attack: player.stats.attack + newBaseValue,
-      defense: player.stats.defense + (newBaseValue * 0.5)
-    }
-  }));
-  
-  // Update skill in tree
-  skill.level = newLevel;
-  skill.baseValue = newBaseValue;
+// ─── Skill Queries ───
+/** Get a combat skill by ID across all trees. */
+export function getCombatSkillById(skillId: string): CombatSkill | null {
+  for (const tree of Object.values(skillTrees)) {
+    const found = tree.combatSkills.find(s => s.id === skillId);
+    if (found) return found;
+  }
+  return null;
 }
 
-// Function to check if a skill is available for upgrade
-export function canUpgradeSkill(skillId: string, skillTreeName: string): boolean {
-  const tree = skillTreeState[skillTreeName];
-  if (!tree) return false;
-  
-  const skill = tree.skills.find(s => s.id === skillId);
-  if (!skill) return false;
-  
-  // Check if player has enough gold or XP
-  return player.gold >= skill.cost || player.xp >= skill.cost;
+/** Get all unlocked combat skills for a given class. */
+export function getUnlockedCombatSkills(className: string): CombatSkill[] {
+  const tree = skillTrees[className];
+  if (!tree || !tree.unlocked) return [];
+  return tree.combatSkills;
 }
 
-// Function to toggle skill activation
-export function toggleSkillActivation(skillId: string, skillTreeName: string) {
-  const tree = skillTreeState[skillTreeName];
-  if (!tree) return;
-  
-  const skill = tree.skills.find(s => s.id === skillId);
-  if (!skill) return;
-  
-  skill.active = !skill.active;
-}
-
-// Function to get current player stats based on skill tree
-export function getPlayerStatsFromSkillTree(): { attack: number; defense: number } {
-  const stats = { attack: 0, defense: 0 };
-  
-  // Apply all active skills
-  for (const tree of Object.values(skillTreeState)) {
-    for (const skill of tree.skills) {
-      if (skill.active) {
-        stats.attack += skill.baseValue * skill.multiplier;
-        stats.defense += skill.baseValue * skill.multiplier * 0.5;
+/** Get total passive bonus for a stat across all unlocked trees. */
+export function getStatBonus(statKey: SkillNode['statKey']): number {
+  let total = 0;
+  for (const tree of Object.values(skillTrees)) {
+    if (!tree.unlocked) continue;
+    for (const node of tree.passiveNodes) {
+      if (node.statKey === statKey && node.unlocked && node.currentLevel > 0) {
+        total += node.bonusPerLevel * node.currentLevel;
       }
     }
   }
-  
-  return stats;
+  return total;
 }
 
-// Function to update player stats when skill tree changes
-export function updatePlayerStats() {
-  const stats = getPlayerStatsFromSkillTree();
-  setGameState('player', (player) => ({
-    ...player,
-    stats: {
-      ...player.stats,
-      attack: player.stats.attack + stats.attack,
-      defense: player.stats.defense + stats.defense
-    }
-  }));
+// ─── Actions ───
+export function unlockTree(treeName: string): boolean {
+  const tree = skillTrees[treeName];
+  if (!tree) return false;
+  setSkillTrees(treeName, 'unlocked', true);
+  // Unlock first passive node by default
+  if (tree.passiveNodes.length > 0) {
+    setSkillTrees(treeName, 'passiveNodes', 0, 'unlocked', true);
+  }
+  return true;
 }
 
-// Effect to automatically update player stats on skill changes
-createEffect(() => {
-  updatePlayerStats();
-});
+export function upgradePassiveNode(treeName: string, nodeId: string): boolean {
+  const tree = skillTrees[treeName];
+  if (!tree) return false;
 
-// Initial effect to set up skill tree on load
-createEffect(() => {
-  setGameState('player', (player) => ({
-    ...player,
-    stats: {
-      ...player.stats,
-      attack: 10,
-      defense: 5
+  const nodeIdx = tree.passiveNodes.findIndex(n => n.id === nodeId);
+  if (nodeIdx < 0) return false;
+
+  const node = tree.passiveNodes[nodeIdx];
+  if (node.currentLevel >= node.maxLevel) return false;
+
+  // Check prerequisites
+  if (node.requires) {
+    for (const req of node.requires) {
+      const reqNode = tree.passiveNodes.find(n => n.id === req);
+      if (!reqNode || reqNode.currentLevel < 1) return false;
     }
-  }));
+  }
+
+  setSkillTrees(treeName, 'passiveNodes', nodeIdx, 'currentLevel', node.currentLevel + 1);
+
+  // Unlock next node in the chain
+  if (nodeIdx + 1 < tree.passiveNodes.length) {
+    setSkillTrees(treeName, 'passiveNodes', nodeIdx + 1, 'unlocked', true);
+  }
+
+  return true;
+}

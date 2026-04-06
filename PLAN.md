@@ -1,25 +1,41 @@
-# RAKANISHU PROJECT EXECUTIVE CHARTER
+# RAKANISHU PROJECT PLAN
 
-## 1. CORE MISSION & STACK
-- CONTEXT: Gothic incremental game. Maintain a dark, atmospheric technical tone.
-- STACK: SolidJS, Tailwind CSS (Utility-first), Xoshiro256++ PRNG.
-- NO-CLICKING: Reject any task involving manual "Player Clicks." All combat and resources must be ticker-driven.
-- HMR BOILERPLATE: 'src/index.tsx' MUST start with '/* @refresh reload */' as the very first line.
+## Completed Milestones
 
-## 2. STATE ARCHITECTURE (THE LAW)
-- PATTERN: Module-Level Store ONLY. No Context Providers.
-- SOURCE OF TRUTH: `src/gameState.ts` (Persistent) and `src/combatState.ts` (Ephemeral).
-- REACTIVITY RULES:
-  * NO DESTRUCTURING: Never destructure 'props' or 'state' (Instantly breaks Solid reactivity).
-  * SIGNAL PURGE: 'createSignal' is FORBIDDEN for game state. Use ONLY for local UI toggles.
-  * SETTERS: Use path-based setters: `setGameState("player", "hp", 100)`.
+- [x] State architecture migration to module-level stores
+- [x] Xoshiro256** PRNG implementation
+- [x] Spatial inventory (10×4 grid) with canPlace/drop
+- [x] Equipment paper doll with type gates
+- [x] Combat ticker system
+- [x] Loot table system
+- [x] Holy Bolt auto-sustain
+- [x] MultiplierRegistry for Prestige Layer 1
+- [x] Hero Registry (Shakira + Kaelan)
+- [x] Math engine (formulas.ts)
+- [x] D2-style XP calc with 3-tier penalty
+- [x] **Monster Scaling Engine** — Piecewise generator + ratio blueprints
+- [x] Data purity (no bracketed tags in names)
 
-## 3. GOTHIC VISUAL IDENTITY
-- LAYOUT: 3-Column System (Left 25% | Center 50% | Right 25%).
-- PALETTE: Obsidian (#0a0a0a), Panels (#1a1a1a), Blood-Red (#880808), Bone (#e2dac2).
-- BANNED: No default Tailwind grays, no 'text-white', no percentage width strings.
+## Active Milestones
 
-## 4. INFERENCE & TOOL PROTOCOLS
-- WRITE STRATEGY: Always prefer 'write_to_file' over 'edit_file' for files < 300 lines to prevent local model merge errors.
-- COMMIT STANDARDS: Format: '[type]: [desc]' (feat, fix, refactor, style).
-- LEGACY: Ignore '.roo/rules/', 'AGENTS.md', and 'llms.txt'—this Charter is the singular truth.
+- [ ] Combat loop integration with scaleMonster() (58 tests green, expect values aligned)
+- [ ] **Item Affix/Prefix/Suffix Generator** — Dynamic affix rolls from TCs
+
+## Completed Milestones
+
+- [x] **Monster Scaling Engine** — Piecewise generator + ratio blueprints
+- [x] D2-style XP calc with 3-tier penalty + rarity multipliers
+- [x] Formulas engine refactor (formulas.ts) — central source of truth
+- [x] scalingTable.ts — generator-based, anchors 1/36/67/110 exact
+- [ ] Prestige Layer 1 UI
+
+## Future Milestones
+
+- [ ] Skill Tree integration
+- [ ] Act 2-5 zones and bosses
+- [ ] Uber/Pandemonium event system
+- [ ] Socketing + Gem system
+- [ ] Rune Word system
+
+## Next Step
+Build the **Item Affix Generator** — prefix/suffix pools, magic/rare affix combinations, quality-dependent affix counts.

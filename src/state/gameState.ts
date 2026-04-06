@@ -125,8 +125,8 @@ const initialGameState = {
     playerSpeed: 3,
     turnQueue: [] as TurnEntry[],
     chillStacks: 0,
-    amazon: { progress: 0 },
-    paladin: { progress: 0 },
+    amazon: { progress: 0, durationSec: 5.7 },
+    paladin: { progress: 0, durationSec: 5.0 },
   },
 };
 

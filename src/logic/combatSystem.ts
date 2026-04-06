@@ -1,205 +1,263 @@
-// Combat System Implementation
-// Phase 3: Core Loop with Xoshiro256++ PRNG Integration
-import { BattleState, EnemyDefinition } from '../combatState'
-// Import Xoshiro256++ PRNG instance from CombatState
-import { xoshiro256 } from '../combatState'
+// src/logic/combatSystem.ts
+// Unified Combat Engine — Warband Turn Queue
+// Xoshiro256++ PRNG + Weight-Based Accumulator
 
-// Module-Level Persistent State (The Law: No destructuring)
-const moduleState = {
-  activeCombatInstanceId: null,
-  combatConfig: {
-    baseDamageMin: 2,
-    baseDamageMax: 8,
-    critThreshold: {
-      physical: 0.15, // 15% base
-      magic: 0.25     // 25% base
-    }
-  }
+import { CombatPhase, CombatLogEntry, TurnEntry } from './combatTypes';
+import {
+  Xoshiro256pp,
+  COMBAT_CONFIG,
+  calculateDamage as calcDmg,
+  type CombatantState,
+  getRng,
+  applyChillToEnemy,
+  type CompanionSnapshot,
+} from './combatUtils';
+import { handleJab, handleColdArrow } from './skillHandlers';
+
+export type { CompanionSnapshot };
+export type CombatActor = TurnEntry['combatant'];
+export { COMBAT_CONFIG, getRng, type CombatantState, applyChillToEnemy };
+
+const MAX_ACCUMULATOR = 10.0;
+export const MAX_TICK_ITERATIONS = 100;
+
+export function rebuildTurnQueue(
+  playerSpeed: number,
+  enemySpeed: number,
+  shakira?: CompanionSnapshot,
+  kyra?: CompanionSnapshot,
+): TurnEntry[] {
+  const queue: TurnEntry[] = [
+    { combatant: 'player', priority: playerSpeed, accumulator: 0 },
+    { combatant: 'enemy', priority: enemySpeed, accumulator: 0 },
+  ];
+  if (shakira) queue.push({ combatant: 'shakira', priority: shakira.speed, accumulator: 0 });
+  if (kyra) queue.push({ combatant: 'kyra', priority: kyra.speed, accumulator: 0 });
+  queue.sort((a, b) => b.priority - a.priority);
+  return queue;
 }
 
-// Export the singleton module
-const CombatSystem = (function() {
-  
-  // ============================================================
-  // STATE ACCESSORS (Path-Based: NO DESTRUCTURING)
-  // ============================================================
-  
-  function getCombatConfig() {
-    return moduleState.combatConfig
+export function popNextActor(
+  queue: TurnEntry[],
+  iteration: number = 0,
+): { actor: string; queue: TurnEntry[] } {
+  if (iteration >= MAX_TICK_ITERATIONS) {
+    const maxIdx = queue.reduce(
+      (best, e, i, arr) => (e.priority >= (arr[best]?.priority ?? 0) ? i : best),
+      0,
+    );
+    return { actor: queue[maxIdx]?.combatant ?? 'none', queue: [...queue] };
   }
-  
-  function setCombatConfig(key: string, value: number) {
-    moduleState.combatConfig[key] = value
-  }
-  
-  function getActiveCombatInstanceId() {
-    return moduleState.activeCombatInstanceId
-  }
-  
-  // ============================================================
-  // PRNG UTILITIES (Xoshiro256++)
-  // ============================================================
-  
-  function randomInt32(rng: { next(): number }) {
-    return rng.next() & 0x7FFFFFFF
-  }
-  
-  function randomInt(rng: { next(): number }, min: number, max: number) {
-    return Math.floor(rng.next() % (max - min + 1)) + min
-  }
-  
-  function randomFloat(rng: { next(): number }, max: number) {
-    return rng.next() / (max << 1)
-  }
-  
-  function weightedRandomChoice<R>(rng: { next(): number }, options: R[]): R {
-    const index = randomInt(rng, 0, options.length - 1)
-    return options[index]
-  }
-  
-  // ============================================================
-  // DAMAGE CALCULATION (Path-Based State Access)
-  // ============================================================
-  
-  export function calculateDamage(attacker: any, defender: EnemyDefinition, rng: { next(): number }) {
-    // Base weapon range
-    const baseRange = moduleState.combatConfig.baseDamageMin + (moduleState.combatConfig.baseDamageMax - moduleState.combatConfig.baseDamageMin)
-    
-    // Variance from RNG
-    const variance = (randomInt(rng, -2, 2) * baseRange) / 10
-    let rawDamage = Math.floor(baseRange + variance)
-    
-    // Clamp to prevent negatives
-    const clampedDamage = Math.max(moduleState.combatConfig.baseDamageMin, rawDamage)
-    
-    // Critical Hit Check
-    const type = defender.type === 'PHYSICAL' ? 'physical' : 'magic'
-    const critChance = moduleState.critThreshold[type]
-    
-    // Roll critical hit
-    const roll = randomFloat(rng, 100)
-    let finalDamage = clampedDamage
-    let isCrit = false
-    
-    if (roll < critChance) {
-      const critMultiplier = 2.5
-      finalDamage = Math.floor(clampedDamage * critMultiplier)
-      isCrit = true
-    }
-    
-    // Defense Mitigation (simplified)
-    const mitigation = defender.defense * 0.1
-    finalDamage = Math.max(1, finalDamage - mitigation)
-    
-    return {
-      damage: finalDamage,
-      isCrit: isCrit,
-      type
+  if (queue.length === 0) return { actor: 'none', queue: [] };
+  const maxPriority = Math.max(1, ...queue.map(e => e.priority));
+  const incremented = queue.map(e => ({
+    ...e,
+    accumulator: Math.min(MAX_ACCUMULATOR, e.accumulator + e.priority / maxPriority),
+  }));
+  let bestIdx = -1;
+  let bestAcc = 0;
+  for (let i = 0; i < incremented.length; i++) {
+    if (incremented[i].accumulator >= 1.0 && incremented[i].accumulator > bestAcc) {
+      bestAcc = incremented[i].accumulator;
+      bestIdx = i;
     }
   }
-  
-  // ============================================================
-  // COMBAT RESOLUTION (Tick-Driven)
-  // ============================================================
-  
-  export async function resolveCombatRound(state: BattleState, rng: { next(): number }) {
-    return new Promise(resolve => {
-      // Phase transitions controlled by ticker
-      if (state.phase === 'INCOMING') {
-        setTimeout(() => resolve({ ...state, phase: 'ENGAGED' }), 100)
-      } else if (state.phase === 'FINISHED') {
-        resolve({ ...state, phase: 'INCOMING' })
-      } else {
-        resolve(state)
-      }
-    })
+  if (bestIdx >= 0) {
+    const updated = [...incremented];
+    updated[bestIdx] = { ...updated[bestIdx], accumulator: updated[bestIdx].accumulator - 1.0 };
+    return { actor: updated[bestIdx].combatant, queue: updated };
   }
-  
-  export async function processCombatLoop(state: BattleState, rng: { next(): number }) {
-    let turn = 0
-    const maxTurns = 100 // Safety brake to prevent infinite loops
-    
-    while (state.phase === 'ENGAGED' && turn < maxTurns) {
-      
-      // AUTO-PLAYER ACTION (Ticker-driven, no manual input)
-      if (!state.damageLog.find(d => d.source === 'Player')) {
-        state.damageLog.push({
-          turn,
-          source: 'Player',
-          target: state.enemy.name,
-          value: calculateDamage(state.player, state.enemy, rng).damage,
-          type: 'PHYSICAL'
-        })
-      }
-      
-      // ENEMY AI RESPONSE (Ticker-driven)
-      if (state.phase !== 'INCOMING') {
-        const lastEnemyHit = state.damageLog.find(d => d.target === 'Player' && !d.source.includes('Player'))
-        
-        if (lastEnemyHit) {
-          const damageFromLast = lastEnemyHit.value
-          state.player.hp = Math.max(0, state.player.hp - damageFromLast)
-        }
-      }
-      
-      // Check player death
-      if (state.player.hp <= 0) {
-        state.phase = 'FINISHED'
-        break
-      }
-      
-      // Advance to next phase transition
-      if (state.phase === 'FINISHED') {
-        state.phase = 'INCOMING'
-      }
-      
-      turn++
-      await resolveCombatRound(state, rng)
-    }
-    
-    return state
-  }
-  
-  // ============================================================
-  // ENEMY AI (Deterministic based on state, not random)
-  // ============================================================
-  
-  export function resolveEnemyAI(state: BattleState) {
-    // Simple AI: Immediate retaliation after taking damage
-    const lastHit = state.damageLog.find(d => d.target === 'Player' && !d.source.includes('Player'))
-    
-    if (lastHit) {
-      return {
-        action: 'RETALIATE',
-        targetId: state.player.hp > 0 ? 'player' : null,
-        damageDealt: calculateDamage(state.enemy, state.player, xoshiro256).damage,
-        cooldown: 0
-      }
-    }
-    
-    // If no damage taken, prepare incoming strike
-    return {
-      action: 'PREPARE',
-      targetId: null,
-      damageDealt: 0,
-      cooldown: state.phase === 'INCOMING' ? 5 : 2
-    }
-  }
-  
-  // ============================================================
-  // TIGGER MANAGEMENT (Module-level hooks)
-  // ============================================================
-  
-  export function startCombatSession(config: any) {
-    moduleState.activeCombatInstanceId = `session_${Date.now()}`
-  }
-  
-  export function endCombatSession() {
-    moduleState.activeCombatInstanceId = null
-  }
-  
-  return CombatSystem
-  
-})();
+  return { actor: 'none', queue: incremented };
+}
 
-export default CombatSystem
+const enemyPool = [
+  { name: 'Shade', hp: 50, maxHp: 50, speed: 2, strength: 3, agility: 1, intellect: 2, defense: 1, type: 'MAGIC' as const },
+  { name: 'Wraith', hp: 70, maxHp: 70, speed: 4, strength: 2, agility: 3, intellect: 4, defense: 2, type: 'MAGIC' as const },
+  { name: 'Skeleton', hp: 40, maxHp: 40, speed: 3, strength: 5, agility: 1, intellect: 0, defense: 3, type: 'PHYSICAL' as const },
+];
+
+function spawnEnemy() {
+  const idx = getRng().nextInt(0, enemyPool.length - 1);
+  return { ...enemyPool[idx] };
+}
+
+export interface CombatTickResult {
+  newPhase: CombatPhase;
+  newTurnQueue: TurnEntry[];
+  newEnemy: ReturnType<typeof spawnEnemy> | null;
+  playerHpDelta: number;
+  enemyHpDelta: number;
+  newLogs: CombatLogEntry[];
+  shouldLevelUp: boolean;
+  shouldFullHeal: boolean;
+  shouldPartialHeal: boolean;
+  chillStacks: number;
+  shakiraHpDelta?: number;
+  kyraHpDelta?: number;
+}
+
+export function combatTick(
+  currentTick: number,
+  currentPhase: CombatPhase,
+  currentPlayerHp: number,
+  currentPlayerMaxHp: number,
+  playerAgility: number,
+  playerSpeed: number,
+  currentEnemy: {
+    name: string; hp: number; maxHp: number; speed: number;
+    strength: number; agility: number; intellect: number; defense: number;
+    type: 'PHYSICAL' | 'MAGIC';
+  } | null,
+  currentLogs: CombatLogEntry[],
+  currentTurnQueue: TurnEntry[],
+  playerXp: number,
+  playerLevel: number,
+  shakira?: CompanionSnapshot,
+  kyra?: CompanionSnapshot,
+  chillStacks: number = 0,
+): CombatTickResult {
+  const result: CombatTickResult = {
+    newPhase: currentPhase, newTurnQueue: currentTurnQueue, newEnemy: null,
+    playerHpDelta: 0, enemyHpDelta: 0, newLogs: [],
+    shouldLevelUp: false, shouldFullHeal: false, shouldPartialHeal: false,
+    chillStacks, shakiraHpDelta: 0, kyraHpDelta: 0,
+  };
+
+  if (currentPhase === 'IDLE') {
+    result.newEnemy = spawnEnemy();
+    result.newPhase = 'ENGAGED';
+    result.newTurnQueue = rebuildTurnQueue(playerSpeed, result.newEnemy.speed, shakira, kyra);
+    return result;
+  }
+
+  if (currentPhase === 'FINISHED') {
+    result.newEnemy = spawnEnemy();
+    result.newPhase = 'ENGAGED';
+    result.newTurnQueue = rebuildTurnQueue(playerSpeed, result.newEnemy.speed, shakira, kyra);
+    result.chillStacks = 0;
+    return result;
+  }
+
+  if (currentPhase !== 'ENGAGED' && currentPhase !== 'RESOLVING') return result;
+
+  result.newPhase = 'RESOLVING';
+  const effectiveEnemy = currentEnemy ?? spawnEnemy();
+  const chillResult = applyChillToEnemy(effectiveEnemy.speed, chillStacks);
+  const enemyEffectiveSpeed = chillResult.debuffedSpeed;
+
+  let workingQueue = currentTurnQueue.length > 0
+    ? [...currentTurnQueue]
+    : rebuildTurnQueue(playerSpeed, enemyEffectiveSpeed, shakira, kyra);
+
+  const { actor, queue } = popNextActor(workingQueue);
+  workingQueue = queue;
+
+  if (actor === 'none') {
+    result.newPhase = 'ENGAGED';
+    result.newTurnQueue = workingQueue;
+    return result;
+  }
+
+  function makeEnemy(): CombatantState {
+    return {
+      name: effectiveEnemy.name, hp: effectiveEnemy.hp, maxHp: effectiveEnemy.maxHp,
+      strength: effectiveEnemy.strength, agility: effectiveEnemy.agility,
+      intellect: effectiveEnemy.intellect, defense: effectiveEnemy.defense,
+      speed: enemyEffectiveSpeed, type: effectiveEnemy.type,
+    };
+  }
+
+  function makePlayer(): CombatantState {
+    return {
+      name: 'Player', hp: currentPlayerHp, maxHp: currentPlayerMaxHp,
+      strength: 5, agility: playerAgility, intellect: 0, defense: 1,
+      speed: playerSpeed, type: 'PHYSICAL',
+    };
+  }
+
+  if (actor === 'player') {
+    if (!effectiveEnemy || effectiveEnemy.hp + result.enemyHpDelta <= 0) {
+      result.newPhase = 'FINISHED';
+      result.newTurnQueue = workingQueue;
+      return result;
+    }
+    const dmg = calcDmg(makePlayer(), makeEnemy());
+    result.enemyHpDelta = -dmg.damage;
+    result.newLogs.push({
+      tick: currentTick, source: 'Player', target: effectiveEnemy.name,
+      value: dmg.damage, type: 'PHYSICAL', isCrit: dmg.isCrit,
+      message: dmg.isCrit
+        ? `Player strikes ${effectiveEnemy.name} for ${dmg.damage} CRIT!`
+        : `Player strikes ${effectiveEnemy.name} for ${dmg.damage} DMG`,
+    });
+    result.newPhase = effectiveEnemy.hp + result.enemyHpDelta <= 0 ? 'FINISHED' : 'ENGAGED';
+  }
+
+  else if (actor === 'enemy') {
+    if (!effectiveEnemy) {
+      result.newPhase = 'FINISHED';
+      result.newTurnQueue = workingQueue;
+      return result;
+    }
+    const dmg = calcDmg(makeEnemy(), makePlayer());
+    result.playerHpDelta = -dmg.damage;
+    result.newLogs.push({
+      tick: currentTick, source: effectiveEnemy.name, target: 'Player',
+      value: dmg.damage, type: effectiveEnemy.type, isCrit: dmg.isCrit,
+      message: dmg.isCrit
+        ? `${effectiveEnemy.name} CRITs player for ${dmg.damage}!`
+        : `${effectiveEnemy.name} hits player for ${dmg.damage} DMG`,
+    });
+    result.newPhase = currentPlayerHp + result.playerHpDelta <= 0 ? 'FINISHED' : 'ENGAGED';
+  }
+
+  else if (actor === 'shakira' && shakira) {
+    if (!effectiveEnemy || effectiveEnemy.hp + result.enemyHpDelta <= 0) {
+      result.newPhase = 'FINISHED';
+      result.newTurnQueue = workingQueue;
+      return result;
+    }
+    const jabResults = handleJab(shakira, makeEnemy(), effectiveEnemy.hp + result.enemyHpDelta);
+    for (const hit of jabResults) {
+      if (hit.cancelled) {
+        result.newLogs.push({
+          tick: currentTick, source: 'Shakira', target: effectiveEnemy.name,
+          value: 0, type: 'PHYSICAL', isCrit: false, message: hit.message,
+        });
+        continue;
+      }
+      result.enemyHpDelta -= hit.damage;
+      result.newLogs.push({
+        tick: currentTick, source: 'Shakira', target: effectiveEnemy.name,
+        value: hit.damage, type: 'PHYSICAL', isCrit: hit.isCrit, message: hit.message,
+      });
+    }
+    result.newPhase = effectiveEnemy.hp + result.enemyHpDelta <= 0 ? 'FINISHED' : 'ENGAGED';
+  }
+
+  else if (actor === 'kyra' && kyra) {
+    if (!effectiveEnemy || effectiveEnemy.hp + result.enemyHpDelta <= 0) {
+      result.newPhase = 'FINISHED';
+      result.newTurnQueue = workingQueue;
+      return result;
+    }
+    const arrowResult = handleColdArrow(kyra, makeEnemy(), chillStacks);
+    result.enemyHpDelta -= arrowResult.damage;
+    result.chillStacks = arrowResult.chill.stacks;
+    result.newLogs.push({
+      tick: currentTick, source: 'Kyra', target: effectiveEnemy.name,
+      value: arrowResult.damage, type: 'MAGIC', isCrit: arrowResult.isCrit,
+      message: arrowResult.message,
+    });
+    result.newPhase = effectiveEnemy.hp + result.enemyHpDelta <= 0 ? 'FINISHED' : 'ENGAGED';
+  }
+
+  if (result.newLogs.length > 50) {
+    result.newLogs = result.newLogs.slice(result.newLogs.length - 50);
+  }
+  return result;
+}
+
+export function getCombatConfig() {
+  return { ...COMBAT_CONFIG };
+}

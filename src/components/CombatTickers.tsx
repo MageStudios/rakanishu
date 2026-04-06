@@ -27,8 +27,9 @@ export default function CombatTickers() {
   let stopP: () => void;
 
   onMount(() => {
-    stopA = tick('amazon', 5.7);
-    stopP = tick('paladin', 5.0);
+    const state = gameState.combat as any;
+    stopA = tick('amazon', state.amazon.durationSec ?? 5.7);
+    stopP = tick('paladin', state.paladin.durationSec ?? 5.0);
   });
   onCleanup(() => { stopA(); stopP(); });
 
