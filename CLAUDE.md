@@ -9,6 +9,9 @@
 - For Reactivity/PRNG Rules: Read docs/ops/engineering.md
 - For Execution/Batching: Read docs/ops/execution.md
 
+## 2.5 STYLE DIRECTORY (READ ON DEMAND) 
+- For Palette & Layout: Read docs/style/palette.md 
+
 ## 3. FEATURE DIRECTORY (READ ON DEMAND)
 - For Scaling/Bestiary: Read docs/features/scaling.md
 - For Loot/Rarity: Read docs/features/loot.md
