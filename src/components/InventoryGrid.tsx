@@ -19,17 +19,21 @@ export default function InventoryGrid() {
     return item ?? null;
   };
   return (
-    <div class="grid" style={`grid-template-columns: repeat(${cols}, 2rem); grid-template-rows: repeat(${rows}, 2rem); gap: 0.25rem;`}>
-      <For each={cells()}>{(i) => {
-        const x = i % cols;
-        const y = Math.floor(i / cols);
-        const item = placement(x, y);
-        return (
-          <div class="border border-gray-800 flex items-center justify-center" style={{"width": "2rem", "height": "2rem", "background": item ? getItemColor(item) : "transparent"}}>
-            {item ? item.name[0] : ""}
-          </div>
-        );
-      }}</For>
+    <div class="panel">
+      <h2 class="text-bone text-xl mb-4">Inventory</h2>
+      <div class="grid" style={`grid-template-columns: repeat(${cols}, 2rem); grid-template-rows: repeat(${rows}, 2rem); gap: 0.25rem;`}>
+        <For each={cells()}>{(i) => {
+          const x = i % cols;
+          const y = Math.floor(i / cols);
+          const item = placement(x, y);
+          const clr = item ? getItemColor(item) : '#2a2a1a';
+          return (
+            <div class="border border-obsidian flex items-center justify-center" style={{ "width": "2rem", "height": "2rem", "background": clr }}>
+              {item ? item.name.charAt(0) : ""}
+            </div>
+          );
+        }}</For>
+      </div>
     </div>
   );
 }

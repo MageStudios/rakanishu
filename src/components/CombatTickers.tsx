@@ -9,7 +9,7 @@ import Decimal from 'break_infinity.js';
 import type { InventoryEntry } from "../state/gameState";
 
 const BG = "#0a0a0a";
-const BLOOD = "#880808";
+const BLOOD = "#8a0000";
 const HOLY_GOLD = "#d4a43c";
 
 /** Deterministic xoshiro256** PRNG for [0, max). Matches rngFloat signature. */
@@ -138,23 +138,34 @@ export default function CombatTickers() {
   });
 
   return (
-    <div class="flex flex-col gap-2" style="color:#e2dac2; font-size:0.75rem">
-      <div class="flex items-center gap-2">
-        <span class="w-16 text-right shrink-0">Amazon</span>
-        <div class="flex-1 h-1.5 rounded" style={`background:${BG}`}>
-          <div
-            class="h-full rounded"
-            style={`background:${BLOOD}; width:${gameState.combat.amazon.progress * 100}%`}
-          />
+    <div class="panel">
+      <h2 class="text-bone text-xl mb-4">Combat</h2>
+      <div class="flex flex-col gap-3" style="font-size:0.75rem">
+        {/* Amazon — blood-red progress */}
+        <div class="flex items-center gap-2">
+          <span class="w-16 text-right shrink-0" style="color:#e2dac2">Amazon</span>
+          <div class="flex-1 h-2" style={`background:${BG}; border:1px solid #8a0000`}>
+            <div
+              class="h-full"
+              style={`background:${BLOOD}; transition: width 50ms linear;`}
+              ref={(el) => {
+                el.style.width = `${Math.round(gameState.combat.amazon.progress * 100)}%`;
+              }}
+            />
+          </div>
         </div>
-      </div>
-      <div class="flex items-center gap-2">
-        <span class="w-16 text-right shrink-0">Paladin</span>
-        <div class="flex-1 h-1.5 rounded" style={`background:${BG}`}>
-          <div
-            class="h-full rounded"
-            style={`background:${HOLY_GOLD}; width:${gameState.combat.paladin.progress * 100}%`}
-          />
+        {/* Paladin — holy-gold progress */}
+        <div class="flex items-center gap-2">
+          <span class="w-16 text-right shrink-0" style="color:#e2dac2">Paladin</span>
+          <div class="flex-1 h-2" style={`background:${BG}; border:1px solid #8a0000`}>
+            <div
+              class="h-full"
+              style={`background:${HOLY_GOLD}; transition: width 50ms linear;`}
+              ref={(el) => {
+                el.style.width = `${Math.round(gameState.combat.paladin.progress * 100)}%`;
+              }}
+            />
+          </div>
         </div>
       </div>
     </div>

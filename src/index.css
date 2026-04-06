@@ -4,8 +4,18 @@
   --color-bone: #e2dac2;
   --color-obsidian: #0a0a0a;
   --color-panel: #1a1a1a;
-  --color-blood-red: #880808;
+  --color-blood-red: #8a0000;
   --color-gold: #908858;
+  /* Rarity borders */
+  --color-runeOrange: #D4A43C;
+  --color-superiorGold: #D4A43C;
+  --color-uniqueGreen: #908858;
+  --color-setGreen: #00FF00;
+  --color-rareYellow: #D4A43C;
+  --color-magicBlue: #4B69FF;
+  --color-craftedOrange: #D4A43C;
+  --color-grayLow: #696969;
+  --color-normalGray: #696969;
 }
 
 * { box-sizing: border-box; }
@@ -18,7 +28,7 @@ body {
 }
 
 .panel {
-  border: 1px solid #880808;
+  border: 1px solid #8a0000;
   padding: 1.5rem;
   margin-bottom: 1rem;
   background-color: #1a1a1a;
@@ -26,6 +36,11 @@ body {
 
 .combat-log {
   font-family: 'Consolas', 'Courier New', monospace;
-  color: #880808;
+  color: #8a0000;
   font-size: 0.9rem;
 }
+
+/* Gothic utility overrides */
+.bone-dim { color: #e2dac2; opacity: 0.4; }
+.bone-mid { color: #e2dac2; opacity: 0.6; }
+.bone-bright { color: #e2dac2; opacity: 0.8; }

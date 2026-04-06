@@ -1,32 +1,25 @@
 /* @refresh reload */
 /**
- * Stash Component — D2-style 10×10 grid with page navigation
- *
- * Renders StashPage[] from gameState.stashPages.
- * Each page is a 10×10 spatial grid. Players can flip between up to 4 pages.
+ * Stash — D2-style 10×10 spatial grid with page navigation
  */
 import { Component, For, createSignal } from 'solid-js';
 import { gameState } from '../state/gameState';
 
 const MAX_PAGES = 4;
 const COLS = 10;
-const CELL_SIZE = 36; // px per cell
+const CELL_SIZE = 36;
 
 const Stash: Component = () => {
   const [currentPage, setCurrentPage] = createSignal(0);
 
-  // How many pages actually exist (at least 1 for display)
   const pageCount = () => Math.max(1, gameState.stashPages.length);
 
   const pageData = () => {
     const idx = currentPage();
-    if (idx < gameState.stashPages.length) {
-      return gameState.stashPages[idx];
-    }
+    if (idx < gameState.stashPages.length) return gameState.stashPages[idx];
     return null;
   };
 
-  // Build a visual 2D array from spatial placements
   const gridCells = (): (string | null)[][] => {
     const empty: (string | null)[][] = Array.from({ length: 10 }, () =>
       Array(10).fill(null)
@@ -39,9 +32,7 @@ const Stash: Component = () => {
         for (let dy = 0; dy < placement.h; dy++) {
           const x = placement.x + dx;
           const y = placement.y + dy;
-          if (y < 10 && x < 10) {
-            empty[y][x] = itemId;
-          }
+          if (y < 10 && x < 10) empty[y][x] = itemId;
         }
       }
     }
@@ -52,14 +43,11 @@ const Stash: Component = () => {
     const grid = gridCells();
     const flat: (string | null)[] = [];
     for (let y = 0; y < 10; y++) {
-      for (let x = 0; x < 10; x++) {
-        flat.push(grid[y]?.[x] ?? null);
-      }
+      for (let x = 0; x < 10; x++) flat.push(grid[y]?.[x] ?? null);
     }
     return flat;
   };
 
-  // Determine if a cell is the origin (top-left) of an item
   const isItemOrigin = (idx: number): boolean => {
     const page = pageData();
     if (!page || !page.spatial.placements) return false;
@@ -71,37 +59,30 @@ const Stash: Component = () => {
     return p ? (p.x === x && p.y === y) : true;
   };
 
-  // Get the item name for origin cells
   const itemNameAt = (idx: number): string | null => {
     if (!isItemOrigin(idx)) return null;
     const val = cells()[idx];
     if (!val) return null;
-    const page = pageData();
-    // Try finding the entry name in ground or from placement data
-    const placement = page?.spatial.placements.get(val);
-    // Derive a display name from the item id
-    return val?.replace(/_(stash|inv|loot|offline)_.*$/, '').replace(/_/g, ' ') ?? null;
+    return val.replace(/_(stash|inv|loot|offline)_.*$/, '').replace(/_/g, ' ') ?? null;
   };
 
-  // Cell styling based on occupancy
   const cellClass = (idx: number): string => {
     const hasItem = cells()[idx] !== null;
     const origin = isItemOrigin(idx);
     if (origin) return 'bg-bone/20 border border-bone/30 text-bone text-xs flex items-center justify-center';
     if (hasItem) return 'bg-bone/10 border border-bone/20';
-    return 'bg-obsidian border border-stone-700/30 hover:border-stone-500/50';
+    return 'bg-obsidian border border-bone/10 hover:border-bone/30';
   };
 
   return (
     <div class="panel">
       <h2 class="text-bone text-xl mb-4 flex justify-between items-center">
         <span>Stash</span>
-        <span class="text-xs text-stone-500">Page {currentPage() + 1}/{pageCount()}</span>
+        <span class="text-xs bone-dim">Page {currentPage() + 1}/{pageCount()}</span>
       </h2>
 
-      {/* 10×10 Grid */}
       <div
-        class="grid gap-0 mx-auto border border-stone-700/50 bg-obsidian select-none"
+        class="grid gap-0 mx-auto border border-blood-red bg-obsidian select-none"
         style={`grid-template-columns: repeat(${COLS}, ${CELL_SIZE}px); grid-template-rows: repeat(10, ${CELL_SIZE}px);`}
       >
         <For each={cells()}>
@@ -111,9 +92,9 @@ const Stash: Component = () => {
               style={{ width: `${CELL_SIZE}px`, height: `${CELL_SIZE}px` }}
               title={itemNameAt(idx()) ?? ''}
             >
-              {itemNameAt(idx()) ? (
+              {itemNameAt(idx()) && (
                 <span class="truncate px-0.5">{itemNameAt(idx())}</span>
-              ) : null}
+              )}
             </div>
           )}
         </For>
@@ -125,7 +106,7 @@ const Stash: Component = () => {
           class={`px-3 py-1 border text-xs transition-colors ${
             currentPage() === 0
               ? 'border-blood-red text-blood-red bg-blood-red/10'
-              : 'border-stone-700 text-stone-500 hover:text-bone hover:border-stone-500'
+              : 'border-bone/20 bone-dim hover:text-bone hover:border-bone/40'
           }`}
           disabled={currentPage() === 0}
           onClick={() => setCurrentPage(0)}
@@ -139,8 +120,8 @@ const Stash: Component = () => {
                 currentPage() === p
                   ? 'border-blood-red text-blood-red bg-blood-red/10 font-bold'
                   : p < pageCount()
-                    ? 'border-stone-700 text-stone-400 hover:text-bone hover:border-stone-500'
-                    : 'border-stone-800 text-stone-700 cursor-not-allowed'
+                    ? 'border-bone/20 bone-dim hover:text-bone hover:border-bone/40'
+                    : 'border-obsidian bone-dim cursor-not-allowed'
               }`}
               disabled={p >= pageCount()}
               onClick={() => setCurrentPage(p)}
@@ -153,7 +134,7 @@ const Stash: Component = () => {
           class={`px-3 py-1 border text-xs transition-colors ${
             currentPage() === pageCount() - 1
               ? 'border-blood-red text-blood-red bg-blood-red/10'
-              : 'border-stone-700 text-stone-500 hover:text-bone hover:border-stone-500'
+              : 'border-bone/20 bone-dim hover:text-bone hover:border-bone/40'
           }`}
           disabled={currentPage() === pageCount() - 1}
           onClick={() => setCurrentPage(pageCount() - 1)}
@@ -162,10 +143,10 @@ const Stash: Component = () => {
         </button>
       </div>
 
-      {/* Overflow */}
+      {/* Overflow Warning */}
       {gameState.stashOverflow.length > 0 && (
-        <div class="mt-3 text-xs text-orange-400 text-center">
-          ⚠ {gameState.stashOverflow.length} item{gameState.stashOverflow.length > 1 ? 's' : ''} in overflow (no space)
+        <div class="mt-3 text-xs text-center" style="color:#D4A43C">
+          ⚠ {gameState.stashOverflow.length} item{gameState.stashOverflow.length > 1 ? 's' : ''} in overflow
         </div>
       )}
     </div>

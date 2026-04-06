@@ -14,3 +14,6 @@
 ## 3. QUALITY ASSURANCE (THE SCALE)
 - Perform "100-Drop" simulations for loot changes.
 - Ensure Gothic ID Purity (SCREAMING_SNAKE_CASE).
+
+## 4. OPENROUTER/FREE
+- If using openrouter/free and a 429 error occurs, wait 10 seconds before retrying.
