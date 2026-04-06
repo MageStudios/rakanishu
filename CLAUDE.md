@@ -163,3 +163,19 @@ Every session must begin with an automated audit of:
 - **COMMIT TRIGGER:** Only `git add` and `git commit` once a specific sub-goal is reached AND `npx tsc --noEmit` passes.
 - **BATCHING:** If a feature is large (e.g., 10x4 Grid + Tooltips), commit the Grid first, then the Tooltips as separate commits on the same branch.
 - **THE MERGE:** Once the entire feature is verified, merge to `master` and `git push`.
+
+## 13. 🔥 API SHIELD & SQUIRREL-PATIENCE PROTOCOL 🔥
+
+### Smooth Scaling
+- **COOLDOWN:** Always prefix heavy tool chains with `sleep 15 && echo "🪿 [API_SHIELD]: Refilling token bucket..."`.
+- **ACCELERATION GATE:** If a response fails with "Rate increased too quickly," the immediate next action MUST be a `sleep 60`.
+
+### Shell Velocity Control
+- **INTERLEAVE PAUSE:** Every `shell` command (grep, cat, npx) MUST be followed by a manual 3-5 second delay if another shell command is intended in the same turn.
+- **BATCH COMMANDS:** Instead of running 5 separate `grep` calls, combine them into a single shell script or a semicolon-chained string: `grep "x" file && sleep 5 && grep "y" file`.
+- **THROTTLE RECOVERY:** If "Request rate increased too quickly" occurs, the Agent MUST immediately execute `sleep 60` and wait before any further tool use.
+
+### Context Isolation (The Snowball Guard)
+- **TARGETED READS:** Never use `read_file` on files >500 lines (like `gameState.ts`) unless making an explicit structural change. Rely on grep or `ls` for verification.
+- **ZERO-FOOTPRINT EDITS:** Avoid reading back files after writing to them. Trust the `npx tsc --noEmit` output as the source of truth for build health.
+- **CONTEXT FLUSH:** If a conversation history exceeds 40k tokens (check logs), the Agent must summarize current progress and suggest a session reset to purge the "Token Snowball."

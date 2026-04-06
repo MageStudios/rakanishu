@@ -1,71 +1,81 @@
 /* @refresh reload */
 import { onCleanup, onMount } from "solid-js";
 import { gameState, setGameState } from "../state/gameState";
-import { generateDrop } from "../logic/lootSystem";
-import { getZoneById } from "../data/zones";
+import { rollRarity, applyRarity, type Item, type Rarity } from "../logic/loot";
 import { findPlacement, type GridPlacement } from "../logic/spatialInventory";
 import { PLAYER_GRID } from "../logic/spatialInventory";
+import { rngInt } from "../logic/prng";
+import Decimal from 'break_infinity.js';
 import type { InventoryEntry } from "../state/gameState";
 
 const BG = "#0a0a0a";
 const BLOOD = "#880808";
 const HOLY_GOLD = "#d4a43c";
 
-/** Generate loot for a ticker completion and place in first empty spatial slot (0-39) */
-function generateLoot(): string[] {
+/** Deterministic xoshiro256** PRNG for [0, max). Matches rngFloat signature. */
+function rngUnit(max: number): number {
+  return rngInt(0, max * 1000 - 1) / 1000;
+}
+
+interface ItemTemplate { id: string; name: string; type: string; baseStats: Record<string, number>; }
+
+const TEMPLATES: ItemTemplate[] = [
+  { id: 'short_bow', name: 'Short Bow', type: 'weapon', baseStats: { damage: 8 } },
+  { id: 'leather_armor', name: 'Leather Armor', type: 'armor', baseStats: { defense: 12 } },
+  { id: 'buckler', name: 'Buckler', type: 'shield', baseStats: { defense: 5 } },
+  { id: 'cap', name: 'Cap', type: 'helm', baseStats: { defense: 3 } },
+];
+
+/** Generate loot for a ticker completion with rarity roll and place in first empty spatial slot (0-39) */
+function generateLootWithRarity(): string[] {
   const logs: string[] = [];
-  const zoneState = gameState.world.currentZone;
-  const zone = getZoneById(zoneState.id);
-  const drops = generateDrop(zoneState.areaLevel, zone);
+  const templateIdx = rngInt(0, TEMPLATES.length - 1);
+  const template = TEMPLATES[templateIdx];
+  const item: Item = {
+    id: `loot_${Date.now()}_${template.id}`,
+    name: template.name,
+    rarity: "Normal",
+    stats: Object.fromEntries(Object.entries(template.baseStats).map(([k, v]) => [k, new Decimal(v)])),
+    spatialIndex: -1,
+    type: template.type as Item["type"],
+  };
 
-  for (const drop of drops) {
-    if (!drop) continue;
+  // Rarity engine link — roll via deterministic weights and apply
+  const rarity: Rarity = rollRarity(rngUnit);
+  applyRarity(item, rarity);
 
-    const isRune = "type" in drop && (drop as any).type === "rune";
-    const entry: InventoryEntry = isRune
-      ? {
-          id: `rune_${(drop as any).name.toLowerCase()}_${Date.now()}`,
-          name: (drop as any).name,
-          type: "rune",
-          weight: 1,
-          isSocketed: false,
-          runeTier: (drop as any).tier,
-          w: 1,
-          h: 1,
-        }
-      : {
-          id: `item_${(drop as any).id || "drop"}_${Date.now()}`,
-          name: (drop as any).name,
-          type: (drop as any).type,
-          damage: (drop as any).damage,
-          defense: (drop as any).defense,
-          weight: (drop as any).weight,
-          quality: (drop as any).quality || "normal",
-          isSuperior: (drop as any).isSuperior ?? false,
-          isSocketed: (drop as any).isSocketed ?? false,
-          runeSockets: (drop as any).runeSockets || 0,
-          w: 1,
-          h: 1,
-        };
+  const entry: InventoryEntry = {
+    id: item.id,
+    name: item.name,
+    type: item.type as any,
+    damage: item.stats.damage ? { min: item.stats.damage.toNumber(), max: Math.ceil(item.stats.damage.toNumber() * 1.3) } : undefined,
+    defense: item.stats.defense !== undefined ? item.stats.defense.toNumber() : undefined,
+    weight: 1,
+    quality: rarity.toLowerCase() as any,
+    isSuperior: rarity === 'Unique',
+    isSocketed: false,
+    runeSockets: 0,
+    w: 1,
+    h: 1,
+  };
 
-    const snap = gameState.inventorySpatial;
-    const gridCopy = [...snap.grid];
-    const pos = findPlacement(gridCopy, PLAYER_GRID.cols, PLAYER_GRID.rows, 1, 1);
+  const snap = gameState.inventorySpatial;
+  const gridCopy = [...snap.grid];
+  const pos = findPlacement(gridCopy, PLAYER_GRID.cols, PLAYER_GRID.rows, 1, 1);
 
-    if (pos) {
-      gridCopy[pos.y * PLAYER_GRID.cols + pos.x] = entry.id;
-      setGameState("inventorySpatial", "grid", gridCopy);
-      setGameState("inventorySpatial", "placements", (prev: Map<string, GridPlacement>) => {
-        const m = new Map(prev);
-        m.set(entry.id, { id: entry.id, x: pos.x, y: pos.y, w: 1, h: 1 });
-        return m;
-      });
-      setGameState("inventory", (prev: InventoryEntry[]) => [...prev, entry]);
-      logs.push(`[LOOT] ${entry.name}`);
-    } else {
-      setGameState("inventorySpatial", "ground", (prev: InventoryEntry[]) => [...prev, entry]);
-      logs.push(`[GROUND] ${entry.name} — no space`);
-    }
+  if (pos) {
+    gridCopy[pos.y * PLAYER_GRID.cols + pos.x] = entry.id;
+    setGameState("inventorySpatial", "grid", gridCopy);
+    setGameState("inventorySpatial", "placements", (prev: Map<string, GridPlacement>) => {
+      const m = new Map(prev);
+      m.set(entry.id, { id: entry.id, x: pos.x, y: pos.y, w: 1, h: 1 });
+      return m;
+    });
+    setGameState("inventory", (prev: InventoryEntry[]) => [...prev, entry]);
+    logs.push(`[LOOT] [${rarity}] ${entry.name}`);
+  } else {
+    setGameState("inventorySpatial", "ground", (prev: InventoryEntry[]) => [...prev, entry]);
+    logs.push(`[GROUND] [${rarity}] ${entry.name} — no space`);
   }
   return logs;
 }
@@ -81,7 +91,7 @@ function tick(key: "amazon" | "paladin", durationSec: number): () => void {
 
     if (progress >= 1 && !fired) {
       fired = true;
-      const logs = generateLoot();
+      const logs = generateLootWithRarity();
       const currentTick = gameState.tick.count;
       setGameState(
         "combat",
@@ -99,7 +109,6 @@ function tick(key: "amazon" | "paladin", durationSec: number): () => void {
           })),
         ]
       );
-      // Reset ticker for next cycle
       start = performance.now();
       setGameState("combat", key, "progress", 0);
       fired = false;
@@ -130,7 +139,6 @@ export default function CombatTickers() {
 
   return (
     <div class="flex flex-col gap-2" style="color:#e2dac2; font-size:0.75rem">
-      {/* Amazon ticker */}
       <div class="flex items-center gap-2">
         <span class="w-16 text-right shrink-0">Amazon</span>
         <div class="flex-1 h-1.5 rounded" style={`background:${BG}`}>
@@ -140,7 +148,6 @@ export default function CombatTickers() {
           />
         </div>
       </div>
-      {/* Paladin ticker */}
       <div class="flex items-center gap-2">
         <span class="w-16 text-right shrink-0">Paladin</span>
         <div class="flex-1 h-1.5 rounded" style={`background:${BG}`}>
