@@ -1,5 +1,5 @@
 /**
- * Equipment Component — D2-style Equipment Grid
+ * Equipment Component — D2-style Equipment Panel
  * Shows equipped items with rarity-colored borders.
  */
 import { Component } from 'solid-js';
@@ -14,18 +14,18 @@ const Equipment: Component = () => {
     { key: 'helm', label: 'Helm' },
   ];
 
-  // D2R-aligned border glow
+  // Gothic-aligned border glow using palette colors only
   const rarityBorder = (item: InventoryEntry): string => {
-    if (item.type === 'rune') return 'border-orange-500';
-    if (item.isSuperior) return 'border-yellow-600';
+    if (item.type === 'rune') return 'border-runeOrange';
+    if (item.isSuperior) return 'border-superiorGold';
     switch (item.quality) {
-      case 'unique': return 'border-amber-400';
-      case 'set': return 'border-green-500';
-      case 'rare': return 'border-yellow-400';
-      case 'magic': return 'border-blue-600';
-      case 'crafted': return 'border-orange-400';
-      case 'low': return 'border-gray-500';
-      default: return 'border-gray-600';
+      case 'unique': return 'border-uniqueGreen';
+      case 'set': return 'border-setGreen';
+      case 'rare': return 'border-rareYellow';
+      case 'magic': return 'border-magicBlue';
+      case 'crafted': return 'border-craftedOrange';
+      case 'low': return 'border-grayLow';
+      default: return 'border-normalGray';
     }
   };
 
@@ -39,21 +39,21 @@ const Equipment: Component = () => {
       <div class="grid grid-cols-2 gap-3">
         {slots.map((slot) => {
           const item = gameState.equipment[slot.key] as InventoryEntry | null;
-          const border = item ? rarityBorder(item) : 'border-stone-800';
-          const bg = item ? 'bg-panel/80' : 'bg-obsidian/60';
+          const border = item ? rarityBorder(item) : 'border-obsidian';
+          const bg = item ? 'bg-panel/80' : 'bg-obsidian';
           const clr = item ? getItemColor(item) : '#4a4438';
 
           return (
-            <div class={`p-3 border ${border} ${bg} min-h-[80px]`}>
-              <div class="text-stone-600 text-xs uppercase tracking-wider">{slot.label}</div>
+            <div class={`p-3 border-2 ${border} ${bg} min-h-[80px]`} key={slot.key}>
+              <div class="bone-dim text-xs uppercase tracking-wider">{slot.label}</div>
               {item ? (
                 <>
                   <div style={{ color: clr }} class="font-medium text-sm mt-1">
                     {item.name}
                   </div>
-                  <div class="text-stone-500 text-xs mt-0.5">
+                  <div class="bone-dim text-xs mt-0.5">
                     {item.damage && `⚔ ${item.damage.min}-${item.damage.max}`}
-                    {item.defense && `🛡 ${item.defense}`}
+                    {item.defense && ` 🛡 ${item.defense}`}
                     {item.runeSockets && item.runeSockets > 0 && ` ◇${item.runeSockets}`}
                   </div>
                   <button
@@ -64,7 +64,7 @@ const Equipment: Component = () => {
                   </button>
                 </>
               ) : (
-                <div class="text-stone-700 text-xs italic mt-1">Empty</div>
+                <div class="bone-dim text-xs italic mt-1">Empty</div>
               )}
             </div>
           );

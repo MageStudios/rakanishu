@@ -13,7 +13,7 @@ const COLORS = {
   panel: '#1a1a1a',
   bone: '#e2dac2',
   stone: '#6b7280',
-  bloodRed: '#880808',
+  bloodRed: '#8a0000',
   holyGold: '#D4AF37',
   gray: '#696969',
   magic: '#4b69ff',

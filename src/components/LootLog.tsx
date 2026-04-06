@@ -13,21 +13,20 @@ const LootLog: Component = () => {
 
   return (
     <div class="panel">
-      <h2 class="text-bone text-xl mb-4 border-b border-stone-800 pb-2">Loot Log</h2>
+      <h2 class="text-bone text-xl mb-4 border-b border-bone/20 pb-2">Loot Log</h2>
 
       {/* Runes Section */}
       {runes().length > 0 && (
         <div class="mb-4">
-          <div class="text-xs text-stone-500 uppercase tracking-wider mb-2">Runes</div>
+          <div class="bone-dim text-xs uppercase tracking-wider mb-2">Runes</div>
           <div class="space-y-1">
             <For each={runes()}>
               {(rune) => (
-                <div class="flex justify-between items-center px-2 py-1 bg-black/40 rounded border-l-2"
-                  style={{ 'border-left-color': '#ff8400' }}>
-                  <span class="text-sm" style={{ color: '#ff8400' }}>
+                <div class="flex justify-between items-center px-2 py-1 bg-obsidian border-l-2 border-blood-red">
+                  <span class="text-sm" style={{ color: '#D4A43C' }}>
                     {rune.name}
                     {rune.runeTier !== undefined && (
-                      <span class="text-stone-600 ml-1">T{rune.runeTier}</span>
+                      <span class="bone-dim ml-1">T{rune.runeTier}</span>
                     )}
                   </span>
                 </div>
@@ -40,7 +39,7 @@ const LootLog: Component = () => {
       {/* Gear Section */}
       {gear().length > 0 && (
         <div>
-          <div class="text-xs text-stone-500 uppercase tracking-wider mb-2">Equipment</div>
+          <div class="bone-dim text-xs uppercase tracking-wider mb-2">Equipment</div>
           <div class="space-y-1 max-h-64 overflow-y-auto">
             <For each={gear()}>
               {(item) => {
@@ -51,26 +50,25 @@ const LootLog: Component = () => {
                   return '';
                 };
                 return (
-                  <div class="flex justify-between items-center px-2 py-1 bg-black/30 rounded hover:bg-black/50 transition-colors cursor-default"
+                  <div class="flex justify-between items-center px-2 py-1 bg-obsidian hover:bg-panel transition-colors cursor-default border-l-2"
                     style={{ 'border-left-color': color }}>
                     <div>
                       <span class="text-sm font-medium" style={{ color }}>
                         {item.name}
                       </span>
                       {statLabel() && (
-                        <span class="text-xs text-stone-500 ml-2">{statLabel()}</span>
+                        <span class="bone-dim text-xs ml-2">{statLabel()}</span>
                       )}
                       {item.isSocketed && (
-                        <span class="text-xs text-green-600 ml-1">[SOCKETED]</span>
+                        <span class="text-xs" style={{ color: '#8a8a5a' }}>[SOCKETED]</span>
                       )}
                     </div>
                     <div class="flex gap-1">
                       {/* Socket button (only if sockets available and not a rune) */}
                       {item.runeSockets !== undefined && item.runeSockets > 0 && !item.isSocketed && (
                         <button
-                          class="text-xs px-1.5 py-0.5 bg-green-900/30 border border-green-800 text-green-500 hover:bg-green-900/60 rounded transition-colors"
+                          class="text-xs px-1.5 py-0.5 bg-panel border border-setGreen text-setGreen hover:bg-setGreen/30 transition-colors"
                           onClick={() => {
-                            // Socket with first available rune
                             const firstRune = runes()[0];
                             if (firstRune) socketItem(item.id, firstRune.id);
                           }}
@@ -81,7 +79,7 @@ const LootLog: Component = () => {
                       {/* Equip button (non-rune gear only) */}
                       {item.type !== 'rune' && item.type !== 'helm' && (
                         <button
-                          class="text-xs px-1.5 py-0.5 bg-blood-red/20 border border-blood-red/50 text-blood-red hover:bg-blood-red/40 rounded transition-colors"
+                          class="text-xs px-1.5 py-0.5 bg-blood-red/20 border border-blood-red/50 text-blood-red hover:bg-blood-red/40 transition-colors"
                           onClick={() => equipItem(item.id)}
                         >
                           Equip
@@ -98,7 +96,7 @@ const LootLog: Component = () => {
 
       {/* Empty State */}
       {gameState.inventory.length === 0 && (
-        <div class="text-stone-600 text-sm italic text-center py-8">
+        <div class="bone-dim text-sm italic text-center py-8">
           No loot yet. The darkness yields nothing... for now.
         </div>
       )}
