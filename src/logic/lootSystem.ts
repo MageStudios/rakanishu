@@ -12,6 +12,8 @@ export interface EquippedItem {
   id: string;
   name: string;
   type: 'weapon' | 'armor' | 'shield' | 'helm';
+  w: number;
+  h: number;
   damage?: { min: number; max: number };
   defense?: number;
   weight: number;
@@ -30,6 +32,8 @@ export interface RuneDrop {
   type: 'rune';
   name: string;
   tier: number;
+  w: 1; // Runes are always 1x1
+  h: 1;
 }
 
 export type DropResult = InventoryItem | RuneDrop | null;
@@ -60,7 +64,9 @@ export function generateDrop(areaLevel: number, zone?: Zone): DropResult[] {
       drops.push({ 
         type: 'rune', 
         name: rollResult.rune, 
-        tier: RUNE_NAMES.indexOf(rollResult.rune) + 1 
+        tier: RUNE_NAMES.indexOf(rollResult.rune) + 1,
+        w: 1,
+        h: 1
       });
       continue;
     }
@@ -100,6 +106,8 @@ export function generateDrop(areaLevel: number, zone?: Zone): DropResult[] {
       id: selectedItem.id,
       name: selectedItem.name,
       type: selectedItem.type,
+      w: selectedItem.w,
+      h: selectedItem.h,
       weight: selectedItem.weight,
       damage,
       defense,
