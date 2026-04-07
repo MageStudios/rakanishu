@@ -19,3 +19,4 @@
 
 ## 4. HEARTBEAT AUDIT
 - Every session: Verify PRNG state changes, check 10x4 Grid bounds, and ensure quality: low items are #696969.
+- Phase 2 Autopilot compliance: Ensure every logic change is preceded by a build check and followed by an atomic commit.
