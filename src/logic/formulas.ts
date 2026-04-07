@@ -134,6 +134,7 @@ export function calculateExperience(
   playerLevel: number,
   baseXp: number,
   rarity: MonsterRarity = 'normal',
+  partySize: number = 1,
 ): number {
   if (baseXp <= 0) return 0;
   if (monsterLevel <= 0) return 0;
@@ -155,7 +156,11 @@ export function calculateExperience(
   }
 
   const rarityMult = rarityXpMultiplier(rarity);
-  return Math.floor(baseXp * ratio * rarityMult);
+
+  // Apply Party Scaling Multiplier: 1 + (n-1) * 1.75
+  const partyMult = 1 + (partySize - 1) * 1.75;
+
+  return Math.floor(baseXp * ratio * rarityMult * partyMult);
 }
 
 export function difficultyXpMultiplier(tier: 'normal' | 'nightmare' | 'hell'): number {

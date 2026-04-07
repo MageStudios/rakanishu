@@ -12,9 +12,9 @@ import { getZoneById, act1Zones, isMandatoryZone } from '../data/zones';
 import { createSpatialInventory, type SpatialInventory } from '../logic/spatialInventory';
 import { TurnEntry, CombatLogEntry } from '../logic/combatTypes';
 import { rngInt } from '../logic/prng';
-import { calculateHolyBoltHeal, getHolyBoltThreshold } from '../logic/formulas';
+import { calculateHolyBoltHeal, getHolyBoltThreshold, calculateExperience } from '../logic/formulas';
 import { ALL_COMPANIONS, getCompanionById } from '../data/companions';
-import { calculateMonsterStats } from '../logic/scaling';
+import { scaleMonsterStats } from '../data/scalingTable';
 import { getMonsterById, ZONE_MONSTER_MAP } from '../data/monsters';
 
 // ───── Companion & Gate Types ─────
@@ -87,6 +87,8 @@ const initialZone = getZoneById('blood_moor')!;
 
 const initialGameState = {
   player: { hp: 100, maxHp: 100, level: 1, xp: new Decimal(0), gold: new Decimal(0), agility: 2, isHolyBoltAutomated: false, holyBoltLevel: 0 },
+  party: ['player', 'shakira'] as string[], // Initial party: Player + Shakira
+  partySize: 2,
   enemy: { name: 'Shade', hp: 50, maxHp: 50, level: 1 },
   monster: null as any, // Holds current monster blueprint/level reference
   tick: { count: 0 },
@@ -176,28 +178,36 @@ export function spawnMonster(monsterId: string): void {
     return;
   }
 
-  // Determine monster level (±1 around player level, min 1)
+  // 1. Get stats for the monster at the current area level
+  const zone = gameState.world.currentZone;
+  const areaLevel = zone.areaLevel || 1;
+  
+  // Determine monster level (±1 around area level, min 1)
   const levelRoll = rngInt(0, 2) - 1; // -1, 0, or +1
-  let monsterLevel = playerLevel + levelRoll;
+  let monsterLevel = areaLevel + levelRoll;
   if (monsterLevel < 1) monsterLevel = 1;
 
-  // Calculate scaled stats using the scaling system
-  const scaledStats = calculateMonsterStats(monsterLevel);
+  // Apply "The Meat" factor (HP/XP scaling based on partySize)
+  const isBossZone = zone.zoneType.startsWith('boss_') || !!zone.bossName;
+  const tier = isBossZone ? 'uber' : 'normal'; 
+  const scaledStats = scaleMonsterStats(monsterLevel, blueprint, tier as any, gameState.partySize);
 
   // Build monster instance
   const monsterInstance = {
+    id: blueprint.id,
     name: blueprint.name,
     level: monsterLevel,
     type: blueprint.type,
     hp: scaledStats.hp,
-    maxHp: scaledStats.maxHp,
-    damageMin: scaledStats.damageMin,
-    damageMax: scaledStats.damageMax,
+    maxHp: scaledStats.hp,
+    xp: scaledStats.xp, // Locked XP at spawn
+    damageMin: scaledStats.dmg,
+    damageMax: Math.floor(scaledStats.dmg * 1.3),
     speed: blueprint.velocity,
-    strength: 10 + Math.floor(scaledStats.damageMin / 2),
+    strength: 10 + Math.floor(scaledStats.dmg / 2),
     agility: 10 + Math.floor(monsterLevel / 3),
     intellect: 10 + Math.floor(monsterLevel / 4),
-    defense: 5 + Math.floor(monsterLevel * 1.5),
+    defense: scaledStats.ac,
   };
 
   // Update store using Mage Studios Law path-based setters (no destructuring)
@@ -568,9 +578,16 @@ export function tick(): string {
   const enemyDied = combatResult.enemyHpDelta < 0 && newEnemyHp <= 0;
 
   if (enemyDied && combatResult.newPhase === 'FINISHED') {
-    // ── Compute XP earned from kill ──
+    // ── Compute XP earned from kill (using Ratio-Based calculateExperience) ──
     const currentLevel = gameState.player.level;
-    const expGain = combatResult.expValue || 10;
+    const monsterXp = (gameState as any).monster?.xp || 10;
+    const expGain = calculateExperience(
+      (gameState as any).monster?.level || 1,
+      currentLevel,
+      monsterXp,
+      'normal', // Default rarity for now
+      gameState.partySize
+    );
     const newXp = gameState.player.xp.add(expGain);
     setGameState('player', 'xp', newXp);
 

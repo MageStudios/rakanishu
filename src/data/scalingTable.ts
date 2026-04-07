@@ -85,15 +85,17 @@ export function getScaledStat(
 
 // ── Monster Scaling Composite ───────────────────────────────────────────────
 
-/** Full stat block for a monster at a given level/difficulty. */
+/** Full stat block for a monster at a given level/difficulty and party size. */
 export function scaleMonsterStats(
   level: number,
   blueprint: { hpRatio: number; xpRatio: number; acRatio: number; dmgRatio: number },
   tier: DifficultyTier,
+  partySize: number = 1,
 ): BaseStats {
+  const partyMult = 1 + (partySize - 1) * 1.75;
   return {
-    hp: getScaledStat(blueprint.hpRatio, level, 'hp', tier),
-    xp: getScaledStat(blueprint.xpRatio, level, 'xp', tier),
+    hp: Math.floor(getScaledStat(blueprint.hpRatio, level, 'hp', tier) * partyMult),
+    xp: Math.floor(getScaledStat(blueprint.xpRatio, level, 'xp', tier) * partyMult),
     ac: getScaledStat(blueprint.acRatio, level, 'ac', tier),
     dmg: getScaledStat(blueprint.dmgRatio, level, 'dmg', tier),
   };

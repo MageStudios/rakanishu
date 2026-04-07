@@ -31,6 +31,7 @@ export interface EffectiveStats {
   maxHp: number; maxMp: number;
   damageMin: number; damageMax: number; defense: number;
   strength: number; agility: number; vitality: number; intellect: number;
+  attackRating: number;
 }
 
 // ─── Base Stats ───────────────────────────────────────────────────────────
@@ -91,6 +92,7 @@ export function calculateEffectiveStats(): EffectiveStats {
     damageMin: Math.floor((base.strength + f.damageMin) * (1 + p.damagePct)),
     damageMax: Math.floor((base.strength + f.damageMax) * (1 + p.damagePct)),
     defense: Math.floor((base.agility + f.defense) * (1 + p.defensePct)),
+    attackRating: Math.floor((base.strength + f.strength) * 2 + (base.agility + f.agility)),
     strength: base.strength + f.strength,
     agility: base.agility + f.agility,
     vitality: ev,

@@ -1,6 +1,6 @@
 // src/logic/combatSystem.ts
 // Unified Combat Engine — Warband Turn Queue
-// Xoshiro256++ PRNG + Weight-Based Accumulator
+// Xoshiro256** PRNG + Weight-Based Accumulator
 
 import { CombatPhase, CombatLogEntry, TurnEntry } from './combatTypes';
 import {
@@ -10,9 +10,14 @@ import {
   type CombatantState,
   getRng,
   applyChillToEnemy,
+  calculateHitChance,
+  applyResistance,
+  damageTypeToResistanceKey,
   type CompanionSnapshot,
+  type ElementalResistances,
 } from './combatUtils';
 import { handleJab, handleColdArrow } from './skillHandlers';
+import { calculateEffectiveStats } from './playerStats';
 
 export type { CompanionSnapshot };
 export type CombatActor = TurnEntry['combatant'];
@@ -70,10 +75,10 @@ export function popNextActor(
   return { actor: 'none', queue: incremented };
 }
 
-const enemyPool = [
-  { name: 'Shade', hp: 50, maxHp: 50, speed: 2, strength: 3, agility: 1, intellect: 2, defense: 1, type: 'MAGIC' as const, monsterType: 'UNDEAD' as const, quality: 'NORMAL' as const },
-  { name: 'Wraith', hp: 70, maxHp: 70, speed: 4, strength: 2, agility: 3, intellect: 4, defense: 2, type: 'MAGIC' as const, monsterType: 'UNDEAD' as const, quality: 'NORMAL' as const },
-  { name: 'Skeleton', hp: 40, maxHp: 40, speed: 3, strength: 5, agility: 1, intellect: 0, defense: 3, type: 'PHYSICAL' as const, monsterType: 'UNDEAD' as const, quality: 'NORMAL' as const },
+const enemyPool: Array<{ name: string; hp: number; maxHp: number; speed: number; strength: number; agility: number; intellect: number; defense: number; type: 'PHYSICAL' | 'MAGIC' | 'DEMON' | 'UNDEAD' | 'BEAST' | 'BOSS' | 'UBER'; monsterType: 'UNDEAD' | 'DEMON' | 'BEAST' | 'HUMAN'; quality: 'NORMAL' | 'CHAMPION' | 'UNIQUE' | 'BOSS' | 'UBER'; level: number; resistances?: ElementalResistances }> = [
+  { name: 'Shade', hp: 50, maxHp: 50, speed: 2, strength: 3, agility: 1, intellect: 2, defense: 1, type: 'MAGIC', monsterType: 'UNDEAD', quality: 'NORMAL', level: 1 },
+  { name: 'Wraith', hp: 70, maxHp: 70, speed: 4, strength: 2, agility: 3, intellect: 4, defense: 2, type: 'MAGIC', monsterType: 'UNDEAD', quality: 'NORMAL', level: 1 },
+  { name: 'Skeleton', hp: 40, maxHp: 40, speed: 3, strength: 5, agility: 1, intellect: 0, defense: 3, type: 'PHYSICAL', monsterType: 'UNDEAD', quality: 'NORMAL', level: 1 },
 ];
 
 function spawnEnemy() {
@@ -110,6 +115,8 @@ export function combatTick(
     type: 'PHYSICAL' | 'MAGIC' | 'DEMON' | 'UNDEAD' | 'BEAST' | 'BOSS' | 'UBER';
     monsterType?: 'UNDEAD' | 'DEMON' | 'BEAST' | 'HUMAN';
     quality?: 'NORMAL' | 'CHAMPION' | 'UNIQUE' | 'BOSS' | 'UBER';
+    level?: number;
+    resistances?: ElementalResistances;
   } | null,
   currentLogs: CombatLogEntry[],
   currentTurnQueue: TurnEntry[],
@@ -164,6 +171,14 @@ export function combatTick(
     return result;
   }
 
+  // ── Effective player stats (from playerStats engine) ──
+  const effectivePlayer = calculateEffectiveStats();
+  const totalAR = effectivePlayer.attackRating;
+  const totalDef = effectivePlayer.defense;
+  const dmgMin = effectivePlayer.damageMin;
+  const dmgMax = effectivePlayer.damageMax;
+  const enemyLvl = effectiveEnemy.level ?? 1;
+
   function makeEnemy(): CombatantState {
     const baseType: 'PHYSICAL' | 'MAGIC' = effectiveEnemy.type as 'PHYSICAL' | 'MAGIC';
     return {
@@ -173,14 +188,20 @@ export function combatTick(
       speed: enemyEffectiveSpeed, type: baseType,
       monsterType: effectiveEnemy.monsterType,
       quality: effectiveEnemy.quality,
+      level: enemyLvl,
     };
   }
 
   function makePlayer(): CombatantState {
     return {
       name: 'Player', hp: currentPlayerHp, maxHp: currentPlayerMaxHp,
-      strength: 5, agility: playerAgility, intellect: 0, defense: 1,
+      strength: effectivePlayer.strength, agility: effectivePlayer.agility,
+      intellect: effectivePlayer.intellect, defense: effectivePlayer.defense,
       speed: playerSpeed, type: 'PHYSICAL',
+      attackRating: totalAR,
+      damageMin: dmgMin,
+      damageMax: dmgMax,
+      level: playerLevel,
     };
   }
 
@@ -190,15 +211,50 @@ export function combatTick(
       result.newTurnQueue = workingQueue;
       return result;
     }
-    const dmg = calcDmg(makePlayer(), makeEnemy());
-    result.enemyHpDelta = -dmg.damage;
-    result.newLogs.push({
-      tick: currentTick, source: 'Player', target: effectiveEnemy.name,
-      value: dmg.damage, type: 'PHYSICAL', isCrit: dmg.isCrit,
-      message: dmg.isCrit
-        ? `Player strikes ${effectiveEnemy.name} for ${dmg.damage} CRIT!`
-        : `Player strikes ${effectiveEnemy.name} for ${dmg.damage} DMG`,
-    });
+    const player = makePlayer();
+    const enemy = makeEnemy();
+
+    // D2-Style Accuracy: HitChance = (AR/(AR+Def)) * 2 * (Lvl/(Lvl+MonsterLvl))
+    const hitPct = calculateHitChance(totalAR, enemy.defense, playerLevel, enemyLvl);
+    const hitRoll = getRng().nextFloat(1.0);
+
+    if (hitRoll > hitPct) {
+      result.newLogs.push({
+        tick: currentTick, source: 'Player', target: effectiveEnemy.name,
+        value: 0, type: 'PHYSICAL', isCrit: false,
+        message: `Player attacks ${effectiveEnemy.name} but misses! (AR: ${totalAR}, Def: ${totalDef}, Dmg: ${dmgMin}-${dmgMax}, Hit: ${Math.round(hitPct * 100)}%)`,
+      });
+    } else {
+      const enemyResistances: ElementalResistances | undefined = effectiveEnemy.resistances
+        ? {
+            physical: effectiveEnemy.resistances.physical ?? 0,
+            fire: effectiveEnemy.resistances.fire ?? 0,
+            cold: effectiveEnemy.resistances.cold ?? 0,
+            lightning: effectiveEnemy.resistances.lightning ?? 0,
+            poison: effectiveEnemy.resistances.poison ?? 0,
+          }
+        : undefined;
+
+      // D2 Immunity Check: resistance >= 100 → damage = 0
+      const physRes = enemyResistances?.physical ?? 0;
+      if (physRes >= 100) {
+        result.newLogs.push({
+          tick: currentTick, source: 'Player', target: effectiveEnemy.name,
+          value: 0, type: 'PHYSICAL', isCrit: false,
+          message: `Player's attack is BLOCKED! ${effectiveEnemy.name} is Immune to Physical (AR: ${totalAR}, Def: ${totalDef}, Dmg: ${dmgMin}-${dmgMax}, Phys Res: ${physRes}%)`,
+        });
+      } else {
+        const dmg = calcDmg(player, enemy, enemyResistances);
+        result.enemyHpDelta = -dmg.damage;
+        result.newLogs.push({
+          tick: currentTick, source: 'Player', target: effectiveEnemy.name,
+          value: dmg.damage, type: dmg.type, isCrit: dmg.isCrit,
+          message: dmg.isCrit
+            ? `Player CRITs ${effectiveEnemy.name} for ${dmg.damage}! (AR: ${totalAR}, Def: ${totalDef}, Dmg: ${dmgMin}-${dmgMax}, Hit: ${Math.round(hitPct * 100)}%)`
+            : `Player strikes ${effectiveEnemy.name} for ${dmg.damage} DMG (AR: ${totalAR}, Def: ${totalDef}, Dmg: ${dmgMin}-${dmgMax}, Hit: ${Math.round(hitPct * 100)}%)`,
+        });
+      }
+    }
     result.newPhase = effectiveEnemy.hp + result.enemyHpDelta <= 0 ? 'FINISHED' : 'ENGAGED';
   }
 
@@ -215,8 +271,8 @@ export function combatTick(
       tick: currentTick, source: effectiveEnemy.name, target: 'Player',
       value: dmg.damage, type: enemyLogType, isCrit: dmg.isCrit,
       message: dmg.isCrit
-        ? `${effectiveEnemy.name} CRITs player for ${dmg.damage}!`
-        : `${effectiveEnemy.name} hits player for ${dmg.damage} DMG`,
+        ? `${effectiveEnemy.name} CRITs player for ${dmg.damage}! (Player Def: ${totalDef})`
+        : `${effectiveEnemy.name} hits player for ${dmg.damage} DMG (Player Def: ${totalDef})`,
     });
     result.newPhase = currentPlayerHp + result.playerHpDelta <= 0 ? 'FINISHED' : 'ENGAGED';
   }

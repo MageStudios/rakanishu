@@ -1,6 +1,7 @@
 // src/logic/combatUtils.ts
-// Low-level combat math: PRNG, config, damage calculation, status effects.
-// Extracted from combatSystem.ts to prevent bloat.
+// Low-level combat math: PRNG, config, damage calculation, accuracy, resistances.
+
+import type { DifficultyTier } from '../data/scalingTable';
 
 // ============================================================
 // Xoshiro256++ PRNG — deterministic seed, zero dependencies
@@ -22,7 +23,6 @@ export class Xoshiro256pp {
   next(): number {
     const s = this.s;
     const sl = (a: number, b: number) => (a << b) >>> 0;
-    const sr = (a: number, b: number) => a >>> b;
     const xo = (a: number, b: number) => (a ^ b) >>> 0;
     const result = sl(xo(s[0], s[3]), 7) + s[0];
     const t = sl(s[1], 9) & 0xFFFFFFFF;
@@ -44,7 +44,6 @@ export class Xoshiro256pp {
   }
 }
 
-// Singleton PRNG — seed 1337 for deterministic combat
 const rng = new Xoshiro256pp(1337);
 
 // ============================================================
@@ -66,7 +65,7 @@ export const COMBAT_CONFIG: CombatConfig = {
 };
 
 // ============================================================
-// Combatant State — mirrors the engine's internal shape
+// Combatant State
 // ============================================================
 
 export interface CombatantState {
@@ -79,15 +78,13 @@ export interface CombatantState {
   defense: number;
   speed: number;
   type: 'PHYSICAL' | 'MAGIC';
-  /** D2 monster family — maps from MonsterBlueprint.type */
+  attackRating?: number;
+  damageMin?: number;
+  damageMax?: number;
+  level?: number;
   monsterType?: 'UNDEAD' | 'DEMON' | 'BEAST' | 'HUMAN';
-  /** Encounter tier — used for XP/multiplier scaling */
   quality?: 'NORMAL' | 'CHAMPION' | 'UNIQUE' | 'BOSS' | 'UBER';
 }
-
-// ============================================================
-// Companion Snapshot — injected from gameState
-// ============================================================
 
 export interface CompanionSnapshot {
   id: string;
@@ -104,19 +101,66 @@ export interface CompanionSnapshot {
 }
 
 // ============================================================
-// Damage Calculation
+// D2-Style Accuracy Check
+// ============================================================
+
+export function calculateHitChance(
+  attackRating: number,
+  defenderDefense: number,
+  attackerLevel: number,
+  defenderLevel: number,
+): number {
+  if (attackRating <= 0 || defenderDefense < 0) return 0.05;
+  const lvl = Math.max(1, attackerLevel);
+  const defLvl = Math.max(1, defenderLevel);
+  const raw = (attackRating / (attackRating + defenderDefense)) * 2 * (lvl / (lvl + defLvl));
+  return Math.max(0.05, Math.min(0.95, raw));
+}
+
+// ============================================================
+// Resistance / Immunity Mapping
+// ============================================================
+
+export interface ElementalResistances {
+  physical: number;
+  fire: number;
+  cold: number;
+  lightning: number;
+  poison: number;
+}
+
+export function applyResistance(rawDamage: number, resistancePercent: number): number {
+  if (resistancePercent >= 100) return 0;
+  const factor = Math.max(0, 1 - resistancePercent / 100);
+  return Math.floor(rawDamage * factor);
+}
+
+export function damageTypeToResistanceKey(
+  dmgType: 'PHYSICAL' | 'MAGIC',
+): keyof ElementalResistances {
+  return dmgType === 'PHYSICAL' ? 'physical' : 'lightning';
+}
+
+// ============================================================
+// Damage Calculation (gear-aware)
 // ============================================================
 
 export function calculateDamage(
   attacker: CombatantState,
   defender: CombatantState,
+  defenderResistances?: ElementalResistances,
+  damageTypeOverride?: 'PHYSICAL' | 'MAGIC',
 ): { damage: number; isCrit: boolean; type: 'PHYSICAL' | 'MAGIC' } {
-  const baseRange = COMBAT_CONFIG.baseDamageMax - COMBAT_CONFIG.baseDamageMin;
+  const rng = getRng();
+  const dMin = attacker.damageMin ?? COMBAT_CONFIG.baseDamageMin;
+  const dMax = attacker.damageMax ?? COMBAT_CONFIG.baseDamageMax;
+  const baseRange = dMax - dMin;
   const variance = Math.floor((rng.nextInt(-2, 2) * baseRange) / 10);
-  let rawDamage = COMBAT_CONFIG.baseDamageMin + baseRange + variance;
-  rawDamage = Math.max(COMBAT_CONFIG.baseDamageMin, rawDamage);
+  let rawDamage = dMin + Math.floor(baseRange / 2) + variance;
+  rawDamage = Math.max(dMin, rawDamage);
 
-  const critChance = attacker.type === 'PHYSICAL'
+  const type = damageTypeOverride ?? attacker.type;
+  const critChance = type === 'PHYSICAL'
     ? COMBAT_CONFIG.critThreshold.physical
     : COMBAT_CONFIG.critThreshold.magic;
   const critRoll = rng.nextFloat(1.0);
@@ -132,25 +176,24 @@ export function calculateDamage(
   const mitigation = defender.defense * 0.1;
   finalDamage = Math.max(1, Math.floor(finalDamage - mitigation));
 
-  return { damage: finalDamage, isCrit, type: attacker.type };
+  if (defenderResistances) {
+    const resKey = damageTypeToResistanceKey(type);
+    finalDamage = applyResistance(finalDamage, defenderResistances[resKey]);
+    finalDamage = Math.max(0, finalDamage);
+  }
+
+  return { damage: finalDamage, isCrit, type };
 }
 
 // ============================================================
 // CHILL Status Effect
 // ============================================================
 
-/** CHILL stack applied to enemy. Reduces speed by 15% per stack, max 5. */
 export interface ChillEffect {
   stacks: number;
-  /** Effective speed after chill reduction */
   debuffedSpeed: number;
 }
 
-/**
- * Calculate CHILL debuff on enemy speed.
- * Each stack: −15% multiplicative slow. Max 5 stacks.
- * Speed is clamped to a minimum of 1.
- */
 export function applyChillToEnemy(baseSpeed: number, currentStacks: number): ChillEffect {
   const clamped = Math.min(currentStacks, 5);
   const multiplier = 1 - 0.15 * clamped;
