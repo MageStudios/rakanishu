@@ -5,6 +5,7 @@
 - **ISOLATION:** Every feature/fix starts with `git checkout -b feature/[name]`.
 - **ATOMIC COMMITS:** Only `git add` and `git commit` once a sub-goal is verified via `npx tsc --noEmit`.
 - **ATOMIC LOOP:** ALL sub-tasks MUST follow: Edit → `npx tsc --noEmit` → `git add/commit` → Update `PLAN.md`. NEVER ask for permission to commit if the build is green.
+- **MERGE QUEUE PROTOCOL:** `git checkout master` → `git pull origin master` → `git checkout [feature]` → `git rebase master`. If `tsc` still GREEN → `git checkout master` → `git merge [feature]` → `git push origin master` → delete feature branch.
 - **BRANCH CLEANUP:** Once merged to master, delete the local feature branch to prevent "Branch Bloat."
 - **THE HANDOVER:** Every completed task MUST update `PLAN.md` to reflect the new state of the world.
 

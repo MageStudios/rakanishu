@@ -13,7 +13,10 @@ const LootLog: Component = () => {
 
   return (
     <div class="panel">
-      <h2 class="text-bone text-xl mb-4 border-b border-bone/20 pb-2">Loot Log</h2>
+      <div class="flex justify-between items-center mb-2">
+        <h2 class="text-bone text-xl">Loot Log</h2>
+        <span class="text-xs bone-dim" style="color: #D4A43C">Time: {gameState.formattedTime}</span>
+      </div>
 
       {/* Runes Section */}
       {runes().length > 0 && (

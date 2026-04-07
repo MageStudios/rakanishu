@@ -23,7 +23,7 @@ export interface CombatantDef {
   intellect: number;
   defense: number;
   speed: number;
-  type: 'PHYSICAL' | 'MAGIC';
+  type: 'PHYSICAL' | 'MAGIC' | 'UNDEAD' | 'DEMON' | 'BEAST' | 'BOSS' | 'UBER';
 }
 
 /** One entry in the turn-order queue */

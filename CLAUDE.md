@@ -3,6 +3,7 @@
 ## 1. CORE VITALS (ALWAYS ACTIVE)
 - STACK: SolidJS, Tailwind, Xoshiro256** PRNG.
 - MAGE STUDIOS LAW: No clicking. No Math.random(). No destructuring.
+- COMMANDS: `/forge [Task]` → triggers Autonomous Atomic Loop (Edit → tsc → commit → repeat until done → merge).
 
 ## 2. OPERATIONAL DIRECTORY (READ ON DEMAND)
 - For Memory/Truncation: Read docs/ops/context.md

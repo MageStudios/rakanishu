@@ -71,9 +71,9 @@ export function popNextActor(
 }
 
 const enemyPool = [
-  { name: 'Shade', hp: 50, maxHp: 50, speed: 2, strength: 3, agility: 1, intellect: 2, defense: 1, type: 'MAGIC' as const },
-  { name: 'Wraith', hp: 70, maxHp: 70, speed: 4, strength: 2, agility: 3, intellect: 4, defense: 2, type: 'MAGIC' as const },
-  { name: 'Skeleton', hp: 40, maxHp: 40, speed: 3, strength: 5, agility: 1, intellect: 0, defense: 3, type: 'PHYSICAL' as const },
+  { name: 'Shade', hp: 50, maxHp: 50, speed: 2, strength: 3, agility: 1, intellect: 2, defense: 1, type: 'MAGIC' as const, monsterType: 'UNDEAD' as const, quality: 'NORMAL' as const },
+  { name: 'Wraith', hp: 70, maxHp: 70, speed: 4, strength: 2, agility: 3, intellect: 4, defense: 2, type: 'MAGIC' as const, monsterType: 'UNDEAD' as const, quality: 'NORMAL' as const },
+  { name: 'Skeleton', hp: 40, maxHp: 40, speed: 3, strength: 5, agility: 1, intellect: 0, defense: 3, type: 'PHYSICAL' as const, monsterType: 'UNDEAD' as const, quality: 'NORMAL' as const },
 ];
 
 function spawnEnemy() {
@@ -94,6 +94,7 @@ export interface CombatTickResult {
   chillStacks: number;
   shakiraHpDelta?: number;
   kyraHpDelta?: number;
+  expValue: number;
 }
 
 export function combatTick(
@@ -106,7 +107,9 @@ export function combatTick(
   currentEnemy: {
     name: string; hp: number; maxHp: number; speed: number;
     strength: number; agility: number; intellect: number; defense: number;
-    type: 'PHYSICAL' | 'MAGIC';
+    type: 'PHYSICAL' | 'MAGIC' | 'DEMON' | 'UNDEAD' | 'BEAST' | 'BOSS' | 'UBER';
+    monsterType?: 'UNDEAD' | 'DEMON' | 'BEAST' | 'HUMAN';
+    quality?: 'NORMAL' | 'CHAMPION' | 'UNIQUE' | 'BOSS' | 'UBER';
   } | null,
   currentLogs: CombatLogEntry[],
   currentTurnQueue: TurnEntry[],
@@ -121,12 +124,14 @@ export function combatTick(
     playerHpDelta: 0, enemyHpDelta: 0, newLogs: [],
     shouldLevelUp: false, shouldFullHeal: false, shouldPartialHeal: false,
     chillStacks, shakiraHpDelta: 0, kyraHpDelta: 0,
+    expValue: 0,
   };
 
   if (currentPhase === 'IDLE') {
     result.newEnemy = spawnEnemy();
     result.newPhase = 'ENGAGED';
     result.newTurnQueue = rebuildTurnQueue(playerSpeed, result.newEnemy.speed, shakira, kyra);
+    result.expValue = result.newEnemy.strength + result.newEnemy.intellect;
     return result;
   }
 
@@ -135,6 +140,7 @@ export function combatTick(
     result.newPhase = 'ENGAGED';
     result.newTurnQueue = rebuildTurnQueue(playerSpeed, result.newEnemy.speed, shakira, kyra);
     result.chillStacks = 0;
+    result.expValue = result.newEnemy.strength + result.newEnemy.intellect;
     return result;
   }
 
@@ -159,11 +165,14 @@ export function combatTick(
   }
 
   function makeEnemy(): CombatantState {
+    const baseType: 'PHYSICAL' | 'MAGIC' = effectiveEnemy.type as 'PHYSICAL' | 'MAGIC';
     return {
       name: effectiveEnemy.name, hp: effectiveEnemy.hp, maxHp: effectiveEnemy.maxHp,
       strength: effectiveEnemy.strength, agility: effectiveEnemy.agility,
       intellect: effectiveEnemy.intellect, defense: effectiveEnemy.defense,
-      speed: enemyEffectiveSpeed, type: effectiveEnemy.type,
+      speed: enemyEffectiveSpeed, type: baseType,
+      monsterType: effectiveEnemy.monsterType,
+      quality: effectiveEnemy.quality,
     };
   }
 
@@ -201,9 +210,10 @@ export function combatTick(
     }
     const dmg = calcDmg(makeEnemy(), makePlayer());
     result.playerHpDelta = -dmg.damage;
+    const enemyLogType: 'PHYSICAL' | 'MAGIC' = (effectiveEnemy.type === 'MAGIC' || effectiveEnemy.intellect > effectiveEnemy.strength) ? 'MAGIC' : 'PHYSICAL';
     result.newLogs.push({
       tick: currentTick, source: effectiveEnemy.name, target: 'Player',
-      value: dmg.damage, type: effectiveEnemy.type, isCrit: dmg.isCrit,
+      value: dmg.damage, type: enemyLogType, isCrit: dmg.isCrit,
       message: dmg.isCrit
         ? `${effectiveEnemy.name} CRITs player for ${dmg.damage}!`
         : `${effectiveEnemy.name} hits player for ${dmg.damage} DMG`,

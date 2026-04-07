@@ -14,6 +14,8 @@ import { TurnEntry, CombatLogEntry } from '../logic/combatTypes';
 import { rngInt } from '../logic/prng';
 import { calculateHolyBoltHeal, getHolyBoltThreshold } from '../logic/formulas';
 import { ALL_COMPANIONS, getCompanionById } from '../data/companions';
+import { calculateMonsterStats } from '../logic/scaling';
+import { getMonsterById, ZONE_MONSTER_MAP } from '../data/monsters';
 
 // ───── Companion & Gate Types ─────
 type CompanionId = 'shakira' | 'kyra';
@@ -72,12 +74,21 @@ export function getItemColor(item: InventoryEntry): string {
   return qualityColor[item.quality || 'normal'] || qualityColor.normal;
 }
 
+// ───── Time Formatting Helper ─────
+function formatTime(ticks: number): string {
+  const totalSeconds = Math.floor(ticks * 0.1); // each tick is 100ms
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
 // ───── Initial State ─────
 const initialZone = getZoneById('blood_moor')!;
 
 const initialGameState = {
   player: { hp: 100, maxHp: 100, level: 1, xp: new Decimal(0), gold: new Decimal(0), agility: 2, isHolyBoltAutomated: false, holyBoltLevel: 0 },
   enemy: { name: 'Shade', hp: 50, maxHp: 50, level: 1 },
+  monster: null as any, // Holds current monster blueprint/level reference
   tick: { count: 0 },
   settings: { debugMode: false },
   world: {
@@ -116,11 +127,17 @@ const initialGameState = {
 
   combat: {
     phase: 'IDLE',
-    activeEnemy: null as {
+    activeEnemy: {
+      name: '', hp: 0, maxHp: 0, speed: 0,
+      strength: 0, agility: 0, intellect: 0,
+      defense: 0, type: 'PHYSICAL' as const,
+    } as {
       name: string; hp: number; maxHp: number; speed: number;
       strength: number; agility: number; intellect: number;
-      defense: number; type: 'PHYSICAL' | 'MAGIC';
-    } | null,
+      defense: number; type: 'PHYSICAL' | 'MAGIC' | 'UNDEAD' | 'DEMON' | 'BEAST' | 'BOSS' | 'UBER';
+      monsterType?: 'UNDEAD' | 'DEMON' | 'BEAST' | 'HUMAN';
+      quality?: 'NORMAL' | 'CHAMPION' | 'UNIQUE' | 'BOSS' | 'UBER';
+    },
     logs: [] as CombatLogEntry[],
     playerSpeed: 3,
     turnQueue: [] as TurnEntry[],
@@ -128,10 +145,86 @@ const initialGameState = {
     amazon: { progress: 0, durationSec: 5.7 },
     paladin: { progress: 0, durationSec: 5.0 },
   },
+
+  // ── Formatted Time Getter ──
+  get formattedTime(): string {
+    // Use direct property access; 'this' refers to the store proxy
+    const count = (this as any).tick?.count ?? 0;
+    return formatTime(count);
+  },
 };
 
 export const [gameState, setGameState] = createStore(initialGameState);
 
+// ───── Monster Spawning Action ─────
+/**
+ * Spawn a monster by blueprint ID using the scaling system.
+ * Uses player level to determine monster level (player level ±1 range, clamped).
+ * Updates both 'monster' store field and the active combat enemy.
+ *
+ * Mage Studios Law: No destructuring. Use path-based setters.
+ */
+export function spawnMonster(monsterId: string): void {
+  const playerLevel = gameState.player.level;
+
+  // Map zone display name → blueprint ID if needed
+  const resolvedId = ZONE_MONSTER_MAP.get(monsterId) || monsterId;
+
+  const blueprint = getMonsterById(resolvedId);
+  if (!blueprint) {
+    console.error(`[spawnMonster] Monster blueprint not found: ${monsterId} (resolved: ${resolvedId})`);
+    return;
+  }
+
+  // Determine monster level (±1 around player level, min 1)
+  const levelRoll = rngInt(0, 2) - 1; // -1, 0, or +1
+  let monsterLevel = playerLevel + levelRoll;
+  if (monsterLevel < 1) monsterLevel = 1;
+
+  // Calculate scaled stats using the scaling system
+  const scaledStats = calculateMonsterStats(monsterLevel);
+
+  // Build monster instance
+  const monsterInstance = {
+    name: blueprint.name,
+    level: monsterLevel,
+    type: blueprint.type,
+    hp: scaledStats.hp,
+    maxHp: scaledStats.maxHp,
+    damageMin: scaledStats.damageMin,
+    damageMax: scaledStats.damageMax,
+    speed: blueprint.velocity,
+    strength: 10 + Math.floor(scaledStats.damageMin / 2),
+    agility: 10 + Math.floor(monsterLevel / 3),
+    intellect: 10 + Math.floor(monsterLevel / 4),
+    defense: 5 + Math.floor(monsterLevel * 1.5),
+  };
+
+  // Update store using Mage Studios Law path-based setters (no destructuring)
+  setGameState('monster', monsterInstance);
+  setGameState('enemy', {
+    name: monsterInstance.name,
+    hp: monsterInstance.hp,
+    maxHp: monsterInstance.maxHp,
+    level: monsterInstance.level,
+  });
+  setGameState('combat', 'activeEnemy', {
+    name: monsterInstance.name,
+    hp: monsterInstance.hp,
+    maxHp: monsterInstance.maxHp,
+    speed: monsterInstance.speed,
+    strength: monsterInstance.strength,
+    agility: monsterInstance.agility,
+    intellect: monsterInstance.intellect,
+    defense: monsterInstance.defense,
+    type: monsterInstance.type,
+  });
+
+  // Reset combat logs and start combat
+  setGameState('combat', 'phase', 'COMBAT');
+  setGameState('combat', 'logs', []);
+  setGameState('combat', 'turnQueue', []);
+}
 
 // ───── Reset helper for test isolation ─────
 let _testResetCounter = 0;
@@ -140,7 +233,13 @@ export function resetGameState(): void {
   // Core combat state — full deep reset to clear store proxies
   setGameState('combat', {
     phase: 'IDLE',
-    activeEnemy: null,
+    activeEnemy: {
+      name: '', hp: 0, maxHp: 0, speed: 0,
+      strength: 0, agility: 0, intellect: 0,
+      defense: 0, type: 'PHYSICAL' as const,
+      monsterType: 'UNDEAD' as const,
+      quality: 'NORMAL' as const,
+    },
     logs: [] as CombatLogEntry[],
     playerSpeed: 3,
     turnQueue: [] as TurnEntry[],
@@ -148,6 +247,7 @@ export function resetGameState(): void {
   // Player & enemy
   setGameState('player', { hp: 100, maxHp: 100, level: 1, xp: new Decimal(0), gold: new Decimal(0), agility: 2 });
   setGameState('enemy', { name: 'Shade', hp: 50, maxHp: 50, level: 1 });
+  setGameState('monster', null);
   setGameState('tick', 'count', 0);
   // World
   const zone = getZoneById('blood_moor')!;
@@ -465,11 +565,13 @@ export function tick(): string {
   }
 
   // ── CHECK VICTORY (uses newEnemyHp, not stale gameState.combat.activeEnemy.hp) ──
-  const enemyDied = combatResult.enemyHpDelta < 0 && gameState.combat.activeEnemy && newEnemyHp <= 0;
+  const enemyDied = combatResult.enemyHpDelta < 0 && newEnemyHp <= 0;
 
   if (enemyDied && combatResult.newPhase === 'FINISHED') {
+    // ── Compute XP earned from kill ──
     const currentLevel = gameState.player.level;
-    const newXp = gameState.player.xp.add(10);
+    const expGain = combatResult.expValue || 10;
+    const newXp = gameState.player.xp.add(expGain);
     setGameState('player', 'xp', newXp);
 
     const zoneState = gameState.world.currentZone;
@@ -490,6 +592,19 @@ export function tick(): string {
     }
 
     advanceZone();
+
+    // Spawn next monster from the new zone
+    const newZone = gameState.world.currentZone;
+    const zoneData = getZoneById(newZone.id);
+    if (zoneData && zoneData.monsters.length > 0) {
+      const idx = Math.floor(rngInt(0, zoneData.monsters.length - 1));
+      const monsterName = zoneData.monsters[idx];
+      const monsterId = monsterName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      spawnMonster(monsterId);
+    } else if (zoneData && zoneData.bossName) {
+      const bossId = zoneData.bossName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      spawnMonster(bossId);
+    }
 
     // Batch: combine all loot entries into one append
     const lootEntries = lootLogs.map(msg =>

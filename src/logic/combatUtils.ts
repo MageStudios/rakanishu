@@ -79,6 +79,10 @@ export interface CombatantState {
   defense: number;
   speed: number;
   type: 'PHYSICAL' | 'MAGIC';
+  /** D2 monster family — maps from MonsterBlueprint.type */
+  monsterType?: 'UNDEAD' | 'DEMON' | 'BEAST' | 'HUMAN';
+  /** Encounter tier — used for XP/multiplier scaling */
+  quality?: 'NORMAL' | 'CHAMPION' | 'UNIQUE' | 'BOSS' | 'UBER';
 }
 
 // ============================================================

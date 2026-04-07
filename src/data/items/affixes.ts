@@ -24,6 +24,10 @@ export const LIZARDS: MagicAffix = {
   id: 'lizards', name: "Lizard's", type: 'PREFIX', stat: 'mana',
   value: [[5, 10], [10, 20], [20, 30]], levelReq: [1, 5, 10],
 };
+export const BERYL: MagicAffix = {
+  id: 'beryl', name: "Beryl", type: 'PREFIX', stat: 'dexterity',
+  value: [[1, 2], [2, 4], [4, 6]], levelReq: [1, 5, 10],
+};
 
 // ─── Suffixes ─────────────────────────────────────────────────────
 
@@ -39,7 +43,11 @@ export const OF_THE_WHALE: MagicAffix = {
   id: 'of_the_whale', name: "of the Whale", type: 'SUFFIX', stat: 'hp',
   value: [[5, 10], [10, 20], [20, 30]], levelReq: [1, 5, 10],
 };
+export const OF_ALACRITY: MagicAffix = {
+  id: 'of_alacrity', name: "of Alacrity", type: 'SUFFIX', stat: 'ias',
+  value: [[10, 15], [15, 20], [20, 30]], levelReq: [1, 8, 15],
+};
 
 export const ALL_AFFIXES: MagicAffix[] = [
-  STURDY, SHARP, LIZARDS, OF_STRENGTH, OF_THE_FOX, OF_THE_WHALE,
+  STURDY, SHARP, LIZARDS, BERYL, OF_STRENGTH, OF_THE_FOX, OF_THE_WHALE, OF_ALACRITY,
 ];

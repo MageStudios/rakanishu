@@ -44,7 +44,7 @@ const Equipment: Component = () => {
           const clr = item ? getItemColor(item) : '#4a4438';
 
           return (
-            <div class={`p-3 border-2 ${border} ${bg} min-h-[80px]`} key={slot.key}>
+            <div class={`p-3 border-2 ${border} ${bg} min-h-[80px]`}>
               <div class="bone-dim text-xs uppercase tracking-wider">{slot.label}</div>
               {item ? (
                 <>
