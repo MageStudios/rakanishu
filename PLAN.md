@@ -19,7 +19,7 @@
 ## Active Milestones
 
 - [ ] Combat loop integration with scaleMonster() (58 tests green, expect values aligned)
-- [ ] **Item Affix/Prefix/Suffix Generator** — Dynamic affix rolls from TCs
+- [x] **Item Affix/Prefix/Suffix Generator** — Dynamic affix rolls from TCs
 
 ## Completed Milestones
 

@@ -3,6 +3,7 @@
 ## 1. CORE VITALS (ALWAYS ACTIVE)
 - STACK: SolidJS, Tailwind, Xoshiro256** PRNG.
 - MAGE STUDIOS LAW: No clicking. No Math.random(). No destructuring.
+- COMMANDS: `/forge [Task]` → triggers Autonomous Atomic Loop (Edit → tsc → commit → repeat until done → merge).
 
 ## 2. OPERATIONAL DIRECTORY (READ ON DEMAND)
 - For Memory/Truncation: Read docs/ops/context.md
@@ -19,3 +20,4 @@
 
 ## 4. HEARTBEAT AUDIT
 - Every session: Verify PRNG state changes, check 10x4 Grid bounds, and ensure quality: low items are #696969.
+- Phase 2 Autopilot compliance: Ensure every logic change is preceded by a build check and followed by an atomic commit.
