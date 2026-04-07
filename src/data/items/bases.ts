@@ -1,126 +1,67 @@
-/**
- * Item Base Definitions — D2LoD Authentic Dimensions
- * Every base type has width/height for spatial grid placement.
- * PRNG roll determines base type → determines dimensions → then rolls stats.
- */
+// @ts-check
+/* @refresh reload */
+export type ItemType = 'WEAPON' | 'ARMOR' | 'JEWELRY';
+export type ArmorSlot = 'HEAD' | 'CHEST' | 'SHIELD' | 'HANDS' | 'FEET' | 'BELT';
+export type WeaponSlot = 'ONE_HAND' | 'TWO_HAND';
 
-export interface ItemBaseEntry {
+export type BaseItem = {
   id: string;
   name: string;
-  type: 'weapon' | 'armor' | 'helm' | 'shield' | 'ring' | 'amulet' | 'charm';
-  slot: EquipmentSlot; // which paper-doll slot it equips to
-  w: number;  // grid width (cells)
-  h: number;  // grid height (cells)
-  damage?: { min: number; max: number };
-  defense?: number;
-}
-
-export type EquipmentSlot =
-  | 'head'      // 2×2 helm
-  | 'torso'     // 2×3 body armor
-  | 'leftHand'  // 2×4 weapon
-  | 'rightHand' // 2×3 shield / 2×4 two-hand
-  | 'gloves'    // 2×2
-  | 'belt'      // 1×2
-  | 'boots'     // 2×2
-  | 'ring1'     // 1×1
-  | 'ring2'     // 1×1
-  | 'amulet';   // 1×1
-
-const SLOTS: Record<string, { w: number; h: number; accepts: string[] }> = {
-  head:      { w: 2, h: 2, accepts: ['helm'] },
-  torso:     { w: 2, h: 3, accepts: ['armor'] },
-  leftHand:  { w: 2, h: 4, accepts: ['weapon'] },
-  rightHand: { w: 2, h: 3, accepts: ['shield'] },
-  gloves:    { w: 2, h: 2, accepts: ['gloves'] },
-  belt:      { w: 1, h: 2, accepts: ['belt'] },
-  boots:     { w: 2, h: 2, accepts: ['boots'] },
-  ring1:     { w: 1, h: 1, accepts: ['ring'] },
-  ring2:     { w: 1, h: 1, accepts: ['ring'] },
-  amulet:    { w: 1, h: 1, accepts: ['amulet'] },
+  type: ItemType;
+  slot: ArmorSlot | WeaponSlot | 'RING' | 'AMULET';
+  requirements: { level: number; str?: number; dex?: number };
+  damage?: [number, number][];
+  speed?: number[];
+  defense?: [number, number][];
+  durability?: number[];
 };
 
-// ─── Weapon Bases ───
-export const weaponBases: ItemBaseEntry[] = [
-  // Swords
-  { id: 'short_sword',    name: 'Short Sword',        type: 'weapon', slot: 'leftHand',  w: 1, h: 3, damage: { min: 4, max: 6 } },
-  { id: 'long_sword',     name: 'Long Sword',         type: 'weapon', slot: 'leftHand',  w: 1, h: 3, damage: { min: 3, max: 10 } },
-  { id: 'broad_sword',    name: 'Broad Sword',        type: 'weapon', slot: 'leftHand',  w: 1, h: 3, damage: { min: 6, max: 9 } },
-  { id: 'crystal_sword',  name: 'Crystal Sword',      type: 'weapon', slot: 'leftHand',  w: 2, h: 4, damage: { min: 5, max: 11 } },
-  { id: 'two_handed_sword', name: 'Two-Handed Sword', type: 'weapon', slot: 'leftHand',  w: 2, h: 4, damage: { min: 4, max: 13 } },
-
-  // Axes
-  { id: 'hatchet',   name: 'Hatchet',    type: 'weapon', slot: 'leftHand', w: 1, h: 3, damage: { min: 3, max: 8 } },
-  { id: 'hand_axe',  name: 'Hand Axe',   type: 'weapon', slot: 'leftHand', w: 1, h: 3, damage: { min: 3, max: 7 } },
-  { id: 'axe',       name: 'Axe',        type: 'weapon', slot: 'leftHand', w: 1, h: 3, damage: { min: 5, max: 12 } },
-  { id: 'double_axe', name: 'Double Axe', type: 'weapon', slot: 'leftHand', w: 2, h: 4, damage: { min: 5, max: 11 } },
-
-  // Bows
-  { id: 'short_bow',     name: "Short Bow",      type: 'weapon', slot: 'leftHand', w: 1, h: 3, damage: { min: 3, max: 6 } },
-  { id: 'hunters_bow',   name: "Hunter's Bow",   type: 'weapon', slot: 'leftHand', w: 1, h: 3, damage: { min: 4, max: 8 } },
-  { id: 'long_bow',      name: 'Long Bow',       type: 'weapon', slot: 'leftHand', w: 1, h: 4, damage: { min: 3, max: 10 } },
-];
-
-// ─── Armor Bases ───
-export const armorBases: ItemBaseEntry[] = [
-  { id: 'leather_armor', name: 'Leather Armor', type: 'armor', slot: 'torso', w: 2, h: 3, defense: 5 },
-  { id: 'heavy_armor',   name: 'Heavy Armor',   type: 'armor', slot: 'torso', w: 2, h: 3, defense: 12 },
-  { id: 'chain_mail',    name: 'Chain Mail',    type: 'armor', slot: 'torso', w: 2, h: 3, defense: 18 },
-  { id: 'plate_mail',    name: 'Plate Mail',    type: 'armor', slot: 'torso', w: 2, h: 4, defense: 26 },
-  { id: 'ring_mail',     name: 'Ring Mail',     type: 'armor', slot: 'torso', w: 2, h: 3, defense: 35 },
-];
-
-// ─── Shield Bases ───
-export const shieldBases: ItemBaseEntry[] = [
-  { id: 'buckler',      name: 'Buckler',      type: 'shield', slot: 'rightHand', w: 2, h: 2, defense: 5 },
-  { id: 'small_shield', name: 'Small Shield', type: 'shield', slot: 'rightHand', w: 2, h: 2, defense: 8 },
-  { id: 'kite_shield',  name: 'Kite Shield',  type: 'shield', slot: 'rightHand', w: 2, h: 3, defense: 22 },
-  { id: 'large_shield', name: 'Large Shield', type: 'shield', slot: 'rightHand', w: 2, h: 3, defense: 18 },
-  { id: 'tower_shield', name: 'Tower Shield', type: 'shield', slot: 'rightHand', w: 2, h: 3, defense: 26 },
-];
-
-// ─── Helm Bases ───
-export const helmBases: ItemBaseEntry[] = [
-  { id: 'cap',       name: 'Cap',       type: 'helm', slot: 'head', w: 2, h: 2, defense: 2 },
-  { id: 'skull_cap', name: 'Skull Cap', type: 'helm', slot: 'head', w: 2, h: 2, defense: 5 },
-  { id: 'helm',      name: 'Helm',      type: 'helm', slot: 'head', w: 2, h: 3, defense: 7 },
-  { id: 'full_helm', name: 'Full Helm', type: 'helm', slot: 'head', w: 2, h: 3, defense: 10 },
-];
-
-// ─── Ring ───
-export const ringBase: ItemBaseEntry = {
-  id: 'ring', name: 'Ring', type: 'ring', slot: 'ring1', w: 1, h: 1, defense: 0,
+// -- Weapons --
+export const SHORT_SWORD: BaseItem = {
+  id: 'SHORT_SWORD', name: 'Short Sword', type: 'WEAPON', slot: 'ONE_HAND',
+  requirements: { level: 1 },
+  damage: [[1, 4], [3, 9], [5, 14]], speed: [2, 3, 4],
 };
-
-// ─── Amulet ───
-export const amuletBase: ItemBaseEntry = {
-  id: 'amulet', name: 'Amulet', type: 'amulet', slot: 'amulet', w: 1, h: 1,
+export const HAND_AXE: BaseItem = {
+  id: 'HAND_AXE', name: 'Hand Axe', type: 'WEAPON', slot: 'ONE_HAND',
+  requirements: { level: 1 },
+  damage: [[2, 5], [4, 10], [6, 15]], speed: [1, 2, 3],
 };
-
-// ─── Charm Bases (D2 authentic sizes) ───
-export const charmBases: ItemBaseEntry[] = [
-  { id: 'small_charm', name: 'Small Charm', type: 'charm', slot: 'head', w: 1, h: 2 },
-  { id: 'large_charm', name: 'Large Charm', type: 'charm', slot: 'head', w: 1, h: 2 },
-  { id: 'grand_charm', name: 'Grand Charm', type: 'charm', slot: 'head', w: 1, h: 3 },
+export const SHORT_BOW: BaseItem = {
+  id: 'SHORT_BOW', name: 'Short Bow', type: 'WEAPON', slot: 'TWO_HAND',
+  requirements: { level: 1, dex: 5 },
+  damage: [[1, 3], [2, 6], [4, 9]], speed: [3, 4, 5],
+};
+// -- Armor --
+export const QUILTED_ARMOR: BaseItem = {
+  id: 'QUILTED_ARMOR', name: 'Quilted Armor', type: 'ARMOR', slot: 'CHEST',
+  requirements: { level: 1 },
+  defense: [[3, 5], [6, 10], [9, 15]], durability: [12, 16, 20],
+};
+export const LEATHER_ARMOR: BaseItem = {
+  id: 'LEATHER_ARMOR', name: 'Leather Armor', type: 'ARMOR', slot: 'CHEST',
+  requirements: { level: 1 },
+  defense: [[5, 7], [8, 12], [11, 18]], durability: [15, 20, 25],
+};
+export const BUCKLER: BaseItem = {
+  id: 'BUCKLER', name: 'Buckler', type: 'ARMOR', slot: 'SHIELD',
+  requirements: { level: 1 },
+  defense: [[2, 4], [4, 8], [6, 12]], durability: [10, 14, 18],
+};
+// -- Jewelry (stat-less bases) --
+export const RING: BaseItem = {
+  id: 'RING', name: 'Ring', type: 'JEWELRY', slot: 'RING',
+  requirements: { level: 0 },
+};
+export const AMULET: BaseItem = {
+  id: 'AMULET', name: 'Amulet', type: 'JEWELRY', slot: 'AMULET',
+  requirements: { level: 0 },
+};
+export const ACT1_BASES: BaseItem[] = [
+  SHORT_SWORD, HAND_AXE, SHORT_BOW,
+  QUILTED_ARMOR, LEATHER_ARMOR, BUCKLER,
+  RING, AMULET,
 ];
 
-// ─── Lookup ───
-const ALL_BASES = [
-  ...weaponBases,
-  ...armorBases,
-  ...shieldBases,
-  ...helmBases,
-  ringBase,
-  amuletBase,
-  ...charmBases,
-];
-
-export function getBaseById(id: string): ItemBaseEntry | undefined {
-  return ALL_BASES.find(b => b.id === id);
-}
-
-export function getAllBases(): ItemBaseEntry[] {
-  return [...ALL_BASES];
-}
-
-export { SLOTS };
+export type ItemBaseEntry = BaseItem;
+export function getAllBases(): BaseItem[] { return ACT1_BASES; }

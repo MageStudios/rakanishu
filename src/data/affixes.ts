@@ -56,7 +56,7 @@ export interface GeneratedMagicItem {
   slot: ItemBaseEntry['slot'];
   w: number;
   h: number;
-  quality: 'magic';
+  quality: 'magic' | 'normal';
   prefixId?: string;
   suffixId?: string;
   affixMult: number;
@@ -217,15 +217,15 @@ export function generateItem(
       baseName: base.name,
       type: base.type,
       slot: base.slot,
-      w: base.w,
-      h: base.h,
-      quality: 'magic',             // still tagged as normal in spirit
+      w: 1,
+      h: 1,
+      quality: 'normal' as const,
       prefixId: undefined,
       suffixId: undefined,
       affixMult: 1.0,
       ilvl: monsterLevel,
-      damage: base.damage ? { ...base.damage } : undefined,
-      defense: base.defense,
+      damage: base.damage ? { min: base.damage[0][0], max: base.damage[0][1] } : undefined,
+      defense: base.defense ? base.defense[0][0] : undefined,
     };
   }
 
@@ -244,12 +244,12 @@ export function generateItem(
   // Step 7: Scale base stats
   const damage = base.damage
     ? {
-        min: Math.round(base.damage.min * affixMult),
-        max: Math.round(base.damage.max * affixMult),
+        min: Math.round(base.damage[1][0] * affixMult),
+        max: Math.round(base.damage[1][1] * affixMult),
       }
     : undefined;
   const defense =
-    base.defense !== undefined ? Math.round(base.defense * affixMult) : undefined;
+    base.defense !== undefined ? Math.round(base.defense[1][0] * affixMult) : undefined;
 
   // Step 8: Item level = max(monsterLevel, prefix.minLevel, suffix.minLevel)
   const ilvl = Math.max(monsterLevel, prefix.minLevel, suffix.minLevel);
@@ -261,8 +261,8 @@ export function generateItem(
     baseName: base.name,
     type: base.type,
     slot: base.slot,
-    w: base.w,
-    h: base.h,
+    w: 1,
+    h: 1,
     prefixId: prefix.id,
     suffixId: suffix.id,
     quality: 'magic',
