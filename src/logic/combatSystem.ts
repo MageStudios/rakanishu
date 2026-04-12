@@ -29,15 +29,17 @@ export const MAX_TICK_ITERATIONS = 100;
 export function rebuildTurnQueue(
   playerSpeed: number,
   enemySpeed: number,
-  shakira?: CompanionSnapshot,
-  kyra?: CompanionSnapshot,
+  roster: CompanionSnapshot[] = [],
 ): TurnEntry[] {
   const queue: TurnEntry[] = [
     { combatant: 'player', priority: playerSpeed, accumulator: 0 },
     { combatant: 'enemy', priority: enemySpeed, accumulator: 0 },
   ];
-  if (shakira) queue.push({ combatant: 'shakira', priority: shakira.speed, accumulator: 0 });
-  if (kyra) queue.push({ combatant: 'kyra', priority: kyra.speed, accumulator: 0 });
+  for (const comp of roster) {
+    if (comp && comp.hp > 0) {
+      queue.push({ combatant: comp.id, priority: comp.speed, accumulator: 0 });
+    }
+  }
   queue.sort((a, b) => b.priority - a.priority);
   return queue;
 }
@@ -97,8 +99,7 @@ export interface CombatTickResult {
   shouldFullHeal: boolean;
   shouldPartialHeal: boolean;
   chillStacks: number;
-  shakiraHpDelta?: number;
-  kyraHpDelta?: number;
+  rosterHpDeltas: Record<string, number>;
   expValue: number;
 }
 
@@ -122,22 +123,21 @@ export function combatTick(
   currentTurnQueue: TurnEntry[],
   playerXp: number,
   playerLevel: number,
-  shakira?: CompanionSnapshot,
-  kyra?: CompanionSnapshot,
+  roster: CompanionSnapshot[] = [],
   chillStacks: number = 0,
 ): CombatTickResult {
   const result: CombatTickResult = {
     newPhase: currentPhase, newTurnQueue: currentTurnQueue, newEnemy: null,
     playerHpDelta: 0, enemyHpDelta: 0, newLogs: [],
     shouldLevelUp: false, shouldFullHeal: false, shouldPartialHeal: false,
-    chillStacks, shakiraHpDelta: 0, kyraHpDelta: 0,
+    chillStacks, rosterHpDeltas: {},
     expValue: 0,
   };
 
   if (currentPhase === 'IDLE') {
     result.newEnemy = spawnEnemy();
     result.newPhase = 'ENGAGED';
-    result.newTurnQueue = rebuildTurnQueue(playerSpeed, result.newEnemy.speed, shakira, kyra);
+    result.newTurnQueue = rebuildTurnQueue(playerSpeed, result.newEnemy.speed, roster);
     result.expValue = result.newEnemy.strength + result.newEnemy.intellect;
     return result;
   }
@@ -145,7 +145,7 @@ export function combatTick(
   if (currentPhase === 'FINISHED') {
     result.newEnemy = spawnEnemy();
     result.newPhase = 'ENGAGED';
-    result.newTurnQueue = rebuildTurnQueue(playerSpeed, result.newEnemy.speed, shakira, kyra);
+    result.newTurnQueue = rebuildTurnQueue(playerSpeed, result.newEnemy.speed, roster);
     result.chillStacks = 0;
     result.expValue = result.newEnemy.strength + result.newEnemy.intellect;
     return result;
@@ -160,7 +160,7 @@ export function combatTick(
 
   let workingQueue = currentTurnQueue.length > 0
     ? [...currentTurnQueue]
-    : rebuildTurnQueue(playerSpeed, enemyEffectiveSpeed, shakira, kyra);
+    : rebuildTurnQueue(playerSpeed, enemyEffectiveSpeed, roster);
 
   const { actor, queue } = popNextActor(workingQueue);
   workingQueue = queue;
@@ -277,45 +277,49 @@ export function combatTick(
     result.newPhase = currentPlayerHp + result.playerHpDelta <= 0 ? 'FINISHED' : 'ENGAGED';
   }
 
-  else if (actor === 'shakira' && shakira) {
-    if (!effectiveEnemy || effectiveEnemy.hp + result.enemyHpDelta <= 0) {
-      result.newPhase = 'FINISHED';
-      result.newTurnQueue = workingQueue;
-      return result;
-    }
-    const jabResults = handleJab(shakira, makeEnemy(), effectiveEnemy.hp + result.enemyHpDelta);
-    for (const hit of jabResults) {
-      if (hit.cancelled) {
-        result.newLogs.push({
-          tick: currentTick, source: 'Shakira', target: effectiveEnemy.name,
-          value: 0, type: 'PHYSICAL', isCrit: false, message: hit.message,
-        });
-        continue;
+  else {
+    const activeComp = roster.find(c => c.id === actor);
+    if (activeComp && activeComp.hp > 0) {
+      if (!effectiveEnemy || effectiveEnemy.hp + result.enemyHpDelta <= 0) {
+        result.newPhase = 'FINISHED';
+        result.newTurnQueue = workingQueue;
+        return result;
       }
-      result.enemyHpDelta -= hit.damage;
-      result.newLogs.push({
-        tick: currentTick, source: 'Shakira', target: effectiveEnemy.name,
-        value: hit.damage, type: 'PHYSICAL', isCrit: hit.isCrit, message: hit.message,
-      });
+      
+      const enemy = makeEnemy();
+      
+      // NPC-Specific Skill Resolution
+      if (activeComp.id === 'flavie' || activeComp.id === 'flavie_proxy') {
+        const arrowResult = handleColdArrow(activeComp, enemy, result.chillStacks);
+        result.enemyHpDelta -= arrowResult.damage;
+        result.chillStacks = arrowResult.chill.stacks;
+        result.newLogs.push({
+          tick: currentTick, source: activeComp.name, target: effectiveEnemy.name,
+          value: arrowResult.damage, type: 'MAGIC', isCrit: arrowResult.isCrit,
+          message: arrowResult.message,
+        });
+      } else if (activeComp.id === 'shakira' || activeComp.id === 'qual_kehk') {
+        const jabResults = handleJab(activeComp, enemy, effectiveEnemy.hp + result.enemyHpDelta);
+        for (const hit of jabResults) {
+          if (hit.cancelled) continue;
+          result.enemyHpDelta -= hit.damage;
+          result.newLogs.push({
+            tick: currentTick, source: activeComp.name, target: effectiveEnemy.name,
+            value: hit.damage, type: 'PHYSICAL', isCrit: hit.isCrit, message: hit.message,
+          });
+        }
+      } else {
+        // Generic Companion Damage Roll
+        const dmg = Math.floor(4 + getRng().nextFloat(1.0) * 6) + Math.floor(activeComp.strength * 0.5);
+        result.enemyHpDelta -= dmg;
+        result.newLogs.push({
+          tick: currentTick, source: activeComp.name, target: effectiveEnemy.name,
+          value: dmg, type: 'PHYSICAL', isCrit: false,
+          message: `${activeComp.name} strikes ${effectiveEnemy.name} for ${dmg} DMG`,
+        });
+      }
+      result.newPhase = effectiveEnemy.hp + result.enemyHpDelta <= 0 ? 'FINISHED' : 'ENGAGED';
     }
-    result.newPhase = effectiveEnemy.hp + result.enemyHpDelta <= 0 ? 'FINISHED' : 'ENGAGED';
-  }
-
-  else if (actor === 'kyra' && kyra) {
-    if (!effectiveEnemy || effectiveEnemy.hp + result.enemyHpDelta <= 0) {
-      result.newPhase = 'FINISHED';
-      result.newTurnQueue = workingQueue;
-      return result;
-    }
-    const arrowResult = handleColdArrow(kyra, makeEnemy(), chillStacks);
-    result.enemyHpDelta -= arrowResult.damage;
-    result.chillStacks = arrowResult.chill.stacks;
-    result.newLogs.push({
-      tick: currentTick, source: 'Kyra', target: effectiveEnemy.name,
-      value: arrowResult.damage, type: 'MAGIC', isCrit: arrowResult.isCrit,
-      message: arrowResult.message,
-    });
-    result.newPhase = effectiveEnemy.hp + result.enemyHpDelta <= 0 ? 'FINISHED' : 'ENGAGED';
   }
 
   if (result.newLogs.length > 50) {

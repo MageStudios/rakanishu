@@ -1,10 +1,11 @@
 /* @refresh reload */
 import { Component } from "solid-js";
-import InventoryGrid from "./components/InventoryGrid";
+import SpatialInventory from "./components/SpatialInventory";
 import Equipment from "./components/Equipment";
 import CombatTickers from "./components/CombatTickers";
 import Stash from "./components/Stash";
 import LootLog from "./components/LootLog";
+import PartyRoster from "./components/PartyRoster";
 
 const App: Component = () => (
   <div class="flex min-h-screen w-full" style="background-color:#0a0a0a">
@@ -14,7 +15,7 @@ const App: Component = () => (
       style="background-color:#0a0a0a;border-right:1px solid #8a0000"
     >
       <Stash />
-      <InventoryGrid />
+      <SpatialInventory />
     </aside>
 
     {/* CENTER — 50% */}
@@ -36,6 +37,7 @@ const App: Component = () => (
       class="w-1/4 min-h-screen overflow-y-auto p-3 space-y-3"
       style="background-color:#0a0a0a;border-left:1px solid #8a0000"
     >
+      <PartyRoster />
       <Equipment />
       <LootLog />
     </aside>

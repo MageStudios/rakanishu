@@ -13,12 +13,13 @@ import { createSpatialInventory, type SpatialInventory } from '../logic/spatialI
 import { TurnEntry, CombatLogEntry } from '../logic/combatTypes';
 import { rngInt } from '../logic/prng';
 import { calculateHolyBoltHeal, getHolyBoltThreshold, calculateExperience } from '../logic/formulas';
-import { ALL_COMPANIONS, getCompanionById } from '../data/companions';
+import { ALL_COMPANIONS, getCompanionById, type Companion } from '../data/companions';
+import { applyAffixes } from '../logic/affixEngine';
 import { scaleMonsterStats } from '../data/scalingTable';
 import { getMonsterById, ZONE_MONSTER_MAP } from '../data/monsters';
 
 // ───── Companion & Gate Types ─────
-type CompanionId = 'shakira' | 'kyra';
+export type CompanionId = string;
 
 // ───── Types ────
 export type EquipmentSlot = 'weapon' | 'armor' | 'shield' | 'helm';
@@ -87,7 +88,7 @@ const initialZone = getZoneById('blood_moor')!;
 
 const initialGameState = {
   player: { hp: 100, maxHp: 100, level: 1, xp: new Decimal(0), gold: new Decimal(0), agility: 2, isHolyBoltAutomated: false, holyBoltLevel: 0 },
-  party: ['player', 'shakira'] as string[], // Initial party: Player + Shakira
+  party: ['player', 'flavie'] as string[], // Initial party: Player + Amazon
   partySize: 2,
   enemy: { name: 'Shade', hp: 50, maxHp: 50, level: 1 },
   monster: null as any, // Holds current monster blueprint/level reference
@@ -108,20 +109,17 @@ const initialGameState = {
   inventorySpatial: createSpatialInventory(),
 
   // ── Companions ──
-  activeCompanion: 'shakira' as CompanionId,
-  lockedCompanions: ['kyra'] as CompanionId[],
-  shakira: {
-    id: 'shakira' as const, name: 'Shakira',
-    hp: 120, maxHp: 120, speed: 3,
-    strength: 8, agility: 6, intellect: 3, defense: 4,
-    type: 'PHYSICAL' as const, skills: ['Jab'] as string[],
-  },
-  kyra: {
-    id: 'kyra' as const, name: 'Kyra',
-    hp: 80, maxHp: 80, speed: 4,
-    strength: 4, agility: 10, intellect: 5, defense: 2,
-    type: 'PHYSICAL' as const, skills: ['Cold Arrow'] as string[],
-  },
+  lockedCompanions: ALL_COMPANIONS.map(c => c.id).filter(id => id !== 'flavie'),
+  roster: ALL_COMPANIONS.reduce((acc, c) => {
+    acc[c.id] = {
+      id: c.id, name: c.name,
+      hp: c.baseStats.hp, maxHp: c.baseStats.maxHp, speed: c.baseStats.speed,
+      strength: c.baseStats.strength, agility: c.baseStats.agility,
+      intellect: c.baseStats.intellect, defense: c.baseStats.defense,
+      type: 'PHYSICAL', skills: c.abilities.map((a: any) => a.name)
+    };
+    return acc;
+  }, {} as Record<string, any>),
   bossDefeatedFlags: {} as Record<string, boolean>,
 
   stashPages: [] as any[],
@@ -272,21 +270,12 @@ export function resetGameState(): void {
     allZoneIds: act1Zones.map(z => z.id),
   });
   // Companions & flags
-  setGameState('activeCompanion', 'shakira');
-  setGameState('lockedCompanions', ['kyra']);
+  setGameState('party', ['player', 'flavie']);
+  setGameState('lockedCompanions', ALL_COMPANIONS.map(c => c.id).filter(id => id !== 'flavie'));
   setGameState('bossDefeatedFlags', {});
-  setGameState('shakira', {
-    id: 'shakira', name: 'Shakira',
-    hp: 120, maxHp: 120, speed: 3,
-    strength: 8, agility: 6, intellect: 3, defense: 4,
-    type: 'PHYSICAL', skills: ['Jab'],
-  });
-  setGameState('kyra', {
-    id: 'kyra', name: 'Kyra',
-    hp: 80, maxHp: 80, speed: 4,
-    strength: 4, agility: 10, intellect: 5, defense: 2,
-    type: 'PHYSICAL', skills: ['Cold Arrow'],
-  });
+  for (const c of ALL_COMPANIONS) {
+    setGameState('roster', c.id, 'hp', c.baseStats.hp);
+  }
   // Inventory & stash
   setGameState('equipment', { weapon: null, armor: null, shield: null, helm: null });
   setGameState('inventory', []);
@@ -390,6 +379,9 @@ function processDrops(drops: DropResult[], zoneId: string): string[] {
         isSocketed: d.isSocketed ?? (d.runeSockets > 0),
         runeSockets: d.runeSockets || 0,
       };
+      // Mini-Phase 3: Apply deterministic affixes
+      applyAffixes(entry);
+
       setGameState('inventory', (prev: InventoryEntry[]) => [entry, ...prev]);
       log.push(`[LOOT] ${zoneLabel} → ${entry.name}`);
     }
@@ -435,8 +427,9 @@ function markBossDefeated(zoneId: string): void {
   // Check companion unlock conditions
   for (const comp of ALL_COMPANIONS) {
     if (!comp.unlockCondition) continue;
-    if (comp.unlockCondition.flag === flagKey && gameState.lockedCompanions.includes(comp.id as CompanionId)) {
-      setGameState('lockedCompanions', (prev: CompanionId[]) => prev.filter(c => c !== comp.id));
+    if (comp.unlockCondition.flag === flagKey && gameState.lockedCompanions.includes(comp.id)) {
+      setGameState('lockedCompanions', (prev: string[]) => prev.filter(c => c !== comp.id));
+      setGameState('party', (prev: string[]) => prev.length < 8 ? [...prev, comp.id] : prev);
     }
   }
 }
@@ -482,13 +475,9 @@ export function tick(): string {
   const currentTick = gameState.tick.count + 1;
   const eff = getEffectivePlayerStats();
   const currentPhase = gameState.combat.phase as any;
-  const shakiraSnap = gameState.activeCompanion === 'shakira'
-    ? gameState.shakira ?? undefined
-    : undefined;
-  const kyraSnap = (gameState.activeCompanion === 'kyra'
-    && !gameState.lockedCompanions.includes('kyra'))
-    ? gameState.kyra ?? undefined
-    : undefined;
+  const activePartySnaps = gameState.party
+    .filter((id: string) => id !== 'player')
+    .map((id: string) => (gameState as any).roster[id]);
   const chillStacks = (gameState.combat as any).chillStacks ?? 0;
 
   const combatResult = combatTick(
@@ -500,15 +489,12 @@ export function tick(): string {
     gameState.combat.turnQueue,
     gameState.player.xp.toNumber(),
     gameState.player.level,
-    shakiraSnap,
-    kyraSnap,
+    activePartySnaps,
     chillStacks,
   );
 
   // ── Compute NEW HP values from deltas (BEFORE any setGameState to avoid stale proxies) ──
   let newPlayerHp = Math.max(1, gameState.player.hp + combatResult.playerHpDelta);
-  const newShakiraHp = gameState.shakira ? Math.max(1, gameState.shakira.hp + (combatResult.shakiraHpDelta || 0)) : 0;
-  const newKyraHp = gameState.kyra ? Math.max(1, gameState.kyra.hp + (combatResult.kyraHpDelta || 0)) : 0;
   const newEnemyHp = gameState.combat.activeEnemy
     ? gameState.combat.activeEnemy.hp + combatResult.enemyHpDelta
     : 0;
@@ -547,11 +533,14 @@ export function tick(): string {
   setGameState('player', 'hp', newPlayerHp);
 
   // ── Companion HP ──
-  if (combatResult.shakiraHpDelta && gameState.shakira) {
-    setGameState('shakira', 'hp', newShakiraHp);
-  }
-  if (combatResult.kyraHpDelta && gameState.kyra) {
-    setGameState('kyra', 'hp', newKyraHp);
+  if (combatResult.rosterHpDeltas) {
+    for (const id in combatResult.rosterHpDeltas) {
+      if ((gameState as any).roster?.[id]) {
+        const curHp = (gameState as any).roster[id].hp;
+        const newHp = Math.max(1, curHp + combatResult.rosterHpDeltas[id]);
+        setGameState('roster', id, 'hp', newHp);
+      }
+    }
   }
 
   // ── Update enemy HP ──

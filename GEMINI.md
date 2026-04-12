@@ -22,3 +22,8 @@
 ## 4. HEARTBEAT AUDIT
 - Every session: Verify PRNG state changes, check 10x4 Grid bounds, and ensure quality: low items are #696969.
 - Phase 2 Autopilot compliance: Ensure every logic change is preceded by a build check and followed by an atomic commit.
+
+## 5. SANDBOX & ENVIRONMENT (FOR AGENTS)
+- NODE_PATH: `/Users/slipmage/.local/share/mise/installs/node/25.8.2/bin/node`
+- NOTE: Use absolute path for Node/NPM/TSC to bypass sandbox/zshrc restrictions.
+

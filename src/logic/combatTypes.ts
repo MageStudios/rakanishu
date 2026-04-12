@@ -28,7 +28,7 @@ export interface CombatantDef {
 
 /** One entry in the turn-order queue */
 export interface TurnEntry {
-  combatant: 'player' | 'enemy' | 'shakira' | 'kyra';
+  combatant: string; // 'player' | 'enemy' | NPC id
   priority: number;   // derived from speed
   accumulator: number; // fills each tick; >= 1.0 → acts
 }
